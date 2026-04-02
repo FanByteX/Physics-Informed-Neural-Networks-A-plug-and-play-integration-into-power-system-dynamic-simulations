@@ -1,0 +1,16 @@
+# DAE-PINNs 依赖
+# 核心依赖
+numpy>=1.20.0
+scipy>=1.7.0
+matplotlib>=3.3.0
+
+# 深度学习框架
+torch>=1.9.0,<2.0.0
+
+# DeepXDE (物理信息神经网络库)
+# 重要: 版本 0.13.6 兼容 PyTorch 1.x
+deepxde==0.13.6
+
+# 其他工具
+pyyaml>=5.4.0
+tqdm>=4.60.0
