@@ -18,4 +18,4 @@ python example_powerNet.py --log-dir ./logs/dae-pinns-best/ --num-test 500 --use
 	--unstacked --dyn-depth 4 --dyn-width 100 --h 0.1 --N 80 --dyn-type attention --alg-type attention --dyn-activation sin \
 	--alg-activation sin --test-every 1000 --scheduler-type plateau --alg-weight 1.0 --num-train 6000 --num-val 100 \
 	--use-tqdm --num-test 500 \
-	--dyn-weight 64.0 --epochs 1000 --start-from-best --lr 1e-4 
+	--dyn-weight 64.0 --epochs 50000 --start-from-best --lr 1e-4 
