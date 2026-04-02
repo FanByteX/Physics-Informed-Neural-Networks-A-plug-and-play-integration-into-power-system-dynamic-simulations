@@ -188,8 +188,11 @@ def main(args):
     )
 
     # train the DAE surrogate model
-    model_name = f'model_{timestamp}.pth' if args.model_name == 'no-name' else (f'model_{args.model_name}_{timestamp}.pth')
-    save_path = os.path.join(args.log_dir, model_name)
+    # 创建带时间戳的子文件夹，本次运行的所有结果都保存在这里
+    run_dir = os.path.join(args.log_dir, timestamp)
+    os.makedirs(run_dir, exist_ok=True)
+    model_name = 'model.pth' if args.model_name == 'no-name' else f'model_{args.model_name}.pth'
+    save_path = os.path.join(run_dir, model_name)
     
     # 创建模型配置字典，用于推理时重建网络结构
     model_config = {
@@ -213,10 +216,29 @@ def main(args):
     }
     
     chcker = events.ModelCheckPoint(save_path, save_better_only=True, every=1000, model_config=model_config) 
-    restore_path = save_path if args.start_from_best else None
-
+    # 设置恢复路径
+    restore_path = None
     if args.start_from_best:
-        print("starting from best model so far...")
+        # 首先查找新的目录结构（子文件夹中的model.pth）
+        subdirs = sorted([d for d in os.listdir(args.log_dir) 
+                          if os.path.isdir(os.path.join(args.log_dir, d)) and d != timestamp])
+        if subdirs:
+            latest_subdir = subdirs[-1]
+            model_file = os.path.join(args.log_dir, latest_subdir, 'model.pth')
+            if os.path.exists(model_file):
+                restore_path = model_file
+                print(f"starting from best model so far: {latest_subdir}/model.pth")
+        
+        # 如果新结构没找到，查找旧结构（直接在log_dir下的model_*.pth文件）
+        if restore_path is None:
+            old_models = sorted([f for f in os.listdir(args.log_dir) 
+                                 if f.startswith('model_') and f.endswith('.pth')])
+            if old_models:
+                restore_path = os.path.join(args.log_dir, old_models[-1])
+                print(f"starting from best model so far (old format): {old_models[-1]}")
+        
+        if restore_path is None:
+            print("No existing model found, starting from scratch...")
 
     loss_history, state = super.train(
         epochs=args.epochs,
@@ -232,10 +254,10 @@ def main(args):
 
     # plot loss history
     print("plotting train and test loss...\n")
-    plot_loss_history(loss_history, fname=os.path.join(args.log_dir, f'loss_{timestamp}.png'))
+    plot_loss_history(loss_history, fname=os.path.join(run_dir, 'loss.png'))
     # save loss history for future use
     np.savez(
-        os.path.join(args.log_dir, f'loss-history_{timestamp}'), 
+        os.path.join(run_dir, 'loss-history'), 
         steps = np.array(loss_history.steps), 
         loss_train = np.array(loss_history.loss_train),
         loss_test = np.array(loss_history.loss_test)
@@ -268,7 +290,7 @@ def main(args):
         return F0, F1, F2, F3, F4
     t, y_eval = scipy_integrate(power_net_dae_plot, X0, args, super.data.IRK_times, N=args.N)
     print("plotting trajectory...\n")
-    plot_three_bus(t, y_eval, y_pred, fname=os.path.join(args.log_dir, f'trajectories_{timestamp}.png'), size=25, figsize=(16,24))
+    plot_three_bus(t, y_eval, y_pred, fname=os.path.join(run_dir, 'trajectories.png'), size=25, figsize=(16,24))
 
     # compute metrics for long-time integration
     l2_error = []
@@ -287,20 +309,20 @@ def main(args):
     # plot L2 relative error for dynamic and algebraic variables
     N_vec = np.arange(1, args.N + 0.1)
     for k in range(5):
-        fname_k = f'L2relative_error_{k}_{timestamp}.png'
-        fname = os.path.join(args.log_dir, fname_k)
+        fname_k = f'L2relative_error_{k}.png'
+        fname = os.path.join(run_dir, fname_k)
         plot_L2relative_error(N_vec, error_data[:, k], fname=fname, size=20, figsize=(8,6))
 
     # save data for future use
-    np.savez(os.path.join(args.log_dir, f"L2Relative_error_{timestamp}"), N=N_vec, error=error_data)
+    np.savez(os.path.join(run_dir, "L2Relative_error"), N=N_vec, error=error_data)
 
     # regression plot for voltage
     x_line = [-.5, .5]
     y_line = [-.5, .5]
-    plot_regression(y_pred[-2,...], y_eval[-2,...], fname=os.path.join(args.log_dir, f'regression-voltage_{timestamp}.png'), size=20, figsize=(8,6), x_line=x_line, y_line=y_line)
+    plot_regression(y_pred[-2,...], y_eval[-2,...], fname=os.path.join(run_dir, 'regression-voltage.png'), size=20, figsize=(8,6), x_line=x_line, y_line=y_line)
 
     # saving data for future use
-    np.savez(os.path.join(args.log_dir, f"prediction-data_{timestamp}"), y_pred=y_pred, y_eval=y_eval, time=t)
+    np.savez(os.path.join(run_dir, "prediction-data"), y_pred=y_pred, y_eval=y_eval, time=t)
 
 
 
