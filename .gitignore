@@ -23,30 +23,11 @@ wheels/
 # Jupyter Notebook
 .ipynb_checkpoints
 
-# PyTorch
-*.pth
-*.pt
-
-# Data files
-*.npy
-*.npz
-
-# Logs
-logs/
-*.log
-
 # IDE
 .idea/
 .vscode/
 *.swp
 *.swo
-
-# Model checkpoints
-checkpoints/
-*.ckpt
-
-# Inference results (can regenerate)
-inference_results/
 
 # Miniconda installer
 Miniconda3*.sh
