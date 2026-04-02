@@ -1,6 +1,9 @@
 import numpy as np
+import matplotlib
+matplotlib.use('Agg')
 import matplotlib.pyplot as plt
 import matplotlib.gridspec as gridspec
+import os
 
 class trajectories_overview:
     def __init__(self, sim_time, t_test_rk_pinn_boost, states_rk_pinn_boost, t_test_rk, states_pure_rk, t_test_assimulo, states_assimulo) -> None:
@@ -158,10 +161,10 @@ class trajectories_overview:
             ax5_m3_pinn.set_label('Machines 2-3')
             ax5.legend()
 
-    def show_results(self, save_fig=False):
+    def show_results(self, save_fig=False, filename='Figure_1'):
         plt.tight_layout()
-
-        if save_fig:
-            plt.savefig('overviewfinal')
-
-        plt.show()
+        os.makedirs('outputs', exist_ok=True)
+        save_path = os.path.join('outputs', f'{filename}.png')
+        plt.savefig(save_path, dpi=150)
+        print(f'图片已保存：{save_path}')
+        plt.close()

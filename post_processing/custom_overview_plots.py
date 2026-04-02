@@ -1,6 +1,9 @@
 import numpy as np
+import matplotlib
+matplotlib.use('Agg')
 import matplotlib.pyplot as plt
 import matplotlib.gridspec as gridspec
+import os
 
 class custom_overview1:
     def __init__(self, sim_time, t_test_solver1, errors_solver1, t_test_solver2, errors_solver2) -> None:
@@ -69,13 +72,13 @@ class custom_overview1:
         errors_simulator = np.vstack([zero_initial_errors, errors_simulator])
         return errors_simulator
     
-    def show_results(self, save_fig=False):
+    def show_results(self, save_fig=False, filename='Figure_4'):
         plt.tight_layout()
-
-        if save_fig:
-            plt.savefig('overviewfinal')
-
-        plt.show()
+        os.makedirs('outputs', exist_ok=True)
+        save_path = os.path.join('outputs', f'{filename}.png')
+        plt.savefig(save_path, dpi=150)
+        print(f'图片已保存：{save_path}')
+        plt.close()
 
 class custom_overview2:
     def __init__(self, timestep_list):
@@ -99,8 +102,8 @@ class custom_overview2:
         ax1.set_ylabel('l1 errors')
         ax1.legend()
         plt.tight_layout()
-
-        if save_fig:
-            plt.savefig('overviewfinal')
-
-        plt.show()
+        os.makedirs('outputs', exist_ok=True)
+        save_path = os.path.join('outputs', 'Figure_6.png')
+        plt.savefig(save_path, dpi=150)
+        print(f'图片已保存：{save_path}')
+        plt.close()

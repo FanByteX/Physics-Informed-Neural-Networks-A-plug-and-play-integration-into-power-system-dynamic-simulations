@@ -24,7 +24,7 @@ parser.add_argument('--time_step_size', type=float, default=4e-2)
 parser.add_argument('--rk_scheme', choices=['trapezoidal', 'backward_euler'], default='trapezoidal')
 parser.add_argument('--compare_pure_RKscheme', action='store_true')
 parser.add_argument('--compare_ground_truth', action='store_true', default=True)
-parser.add_argument('--study_selection', choices=[1, 2, 3, 4, 5], default=2)
+parser.add_argument('--study_selection', type=int, choices=[1, 2, 3, 4, 5], default=2)
 parser.add_argument('--gpu', type=int, default=0)
 args = parser.parse_args()
 
@@ -69,6 +69,7 @@ def load_pinn_machine(pinn_model):
     _, num_neurons, num_layers, inputs, outputs = loaded_pinn['architecture']
     pinn_integrated = src.PINN_architecture.FCN_RESNET(inputs,outputs,num_neurons,num_layers, norm_range, lb_range)
     pinn_integrated.load_state_dict(loaded_pinn['state_dict'])
+    pinn_integrated.to(device)
     pinn_integrated.eval()
     return pinn_integrated
 
@@ -231,7 +232,8 @@ if __name__ == "__main__":
         errors_pinn_array = errors_analysis(t_evo_pinn, states_evo_pinn, t_true, states_true, ratio_trapz_assimulo)
         plotting = custom_overview1(args.sim_time, t_test_pure_rk, errors_pure_array, t_evo_pinn, errors_pinn_array)
         plotting.trajectory_and_errors_plot(8, 10, t_true, states_true, states_evo, states_evo_pinn)
-        plotting.show_results()
+        fig_name = 'Figure_4' if args.sim_time == 10 else 'Figure_5'
+        plotting.show_results(filename=fig_name)
 
     elif args.study_selection == 3:
         timesteps_to_study = [5e-3, 8e-3, 0.01, 0.02, 0.025, 0.04]
@@ -289,7 +291,11 @@ if __name__ == "__main__":
             ax1.plot(t_evo_pinn, errors_simulator_h[:, 10], color = 'blue', label='Hybrid solver')
             print(ind+1, len(start_ini_cond))
         plt.tight_layout()
-        plt.show()
+        import os
+        os.makedirs('outputs', exist_ok=True)
+        plt.savefig('outputs/Figure_7.png', dpi=150)
+        print('图片已保存：outputs/Figure_7.png')
+        plt.close()
     
     elif args.study_selection == 5:
         timesteps_to_study =  [0.006, 0.008, 0.01, 0.014, 0.02, 0.024, 0.034, 0.04]
@@ -333,6 +339,8 @@ if __name__ == "__main__":
             error_dist_per_timestep_pure[ind_timestep, :] = boxplot_data_trapz
             error_dist_per_timestep_hybrid[ind_timestep, :] = boxplot_data_hybrid
             print(ind_timestep+1, len(timesteps_to_study))
+        import matplotlib
+        matplotlib.use('Agg')
         import matplotlib.pyplot as plt
         import matplotlib.gridspec as gridspec
         plotting_states_final = [8,10,4, 6] # [8,9,10,7]
@@ -352,4 +360,8 @@ if __name__ == "__main__":
             ax.set_yscale('log')
             ax.legend()
         plt.tight_layout()
-        plt.show()
+        import os
+        os.makedirs('outputs', exist_ok=True)
+        plt.savefig('outputs/Figure_8.png', dpi=150)
+        print('图片已保存：outputs/Figure_8.png')
+        plt.close()

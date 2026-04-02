@@ -105,9 +105,11 @@ class TDS_simulation():
         return output_computation
     
     def pinn_integration_scheme(self, pinn_input) -> tuple:
+        device = next(self.pinn_check.parameters()).device
+        pinn_input = pinn_input.to(device)
         preds_pinn = self.pinn_check(pinn_input)
-        d_delta = preds_pinn[:, 0:1][0][0]
-        d_omega = preds_pinn[:, 1:2][0][0]
+        d_delta = preds_pinn[:, 0:1][0][0].cpu()
+        d_omega = preds_pinn[:, 1:2][0][0].cpu()
         return d_delta, d_omega
     
     def calculate_new_reference(self, theta_0, theta_1, delta_0):
