@@ -1,5 +1,19 @@
 """
-Training script for IEEE 9-bus DAE-PINN
+Trainer for IEEE 9-bus DAE-PINN.
+
+Save format is compatible with plug/src/tds_dae_rk_schemes.py:
+  checkpoint = {
+      'state_dict'         : model.state_dict(),
+      'architecture'       : (_, num_neurons, num_layers, inputs, outputs),
+      'machine_parameters' : (D, Pg, H, Xd_p, Rs)   -- per machine tuple
+      'range_norm'         : (norm_range, lb_range)  -- dummy / actual norm
+      'voltage_stats'      : (voltage_limits, ...)
+      'theta_stats'        : (theta_limits, ...)
+      'init_state'         : (Eq0, Ed0, delta0, omega0)
+      'model_config'       : {full args dict}
+      'epoch'              : int
+      'loss'               : float
+  }
 """
 import os
 import time
@@ -13,12 +27,6 @@ from data_handler import IEEE9BusDataHandler
 
 
 class Trainer:
-    """
-    Trainer class for IEEE 9-bus PINN
-    
-    Similar to DAE-PINNs supervisor approach
-    """
-    
     def __init__(
         self,
         config_dynamic_path='../config_files/config_machines_dynamic.yaml',
@@ -28,30 +36,29 @@ class Trainer:
         device='cuda',
     ):
         self.device = torch.device(device if torch.cuda.is_available() else 'cpu')
-        print(f"Using device: {self.device}")
-        
-        self.log_dir = log_dir
-        os.makedirs(log_dir, exist_ok=True)
-        
-        # Load physics constraints
-        self.physics = IEEE9BusPhysics(
-            config_dynamic_path,
-            config_static_path,
-            Y_admittance_path
-        )
-        
-        # Initialize data handler
+        print(f"\nUsing device: {self.device}")
+
+        # Create a timestamped run directory
+        timestamp = time.strftime('%Y%m%d_%H%M%S')
+        self.run_dir = os.path.join(log_dir, timestamp)
+        os.makedirs(self.run_dir, exist_ok=True)
+        print(f"Run directory: {self.run_dir}")
+
+        self.physics      = IEEE9BusPhysics(config_dynamic_path, config_static_path, Y_admittance_path)
         self.data_handler = None
-        
-        # Initialize model
-        self.model = None
-        
-        # Training state
-        self.optimizer = None
-        self.scheduler = None
+        self.model        = None
+        self.optimizer    = None
+        self.scheduler    = None
         self.loss_history = []
-        self.best_loss = float('inf')
-    
+        self.best_loss    = float('inf')
+        self.best_epoch   = 0
+
+        # store config paths for saving
+        self._cfg_dyn  = config_dynamic_path
+        self._cfg_sta  = config_static_path
+        self._cfg_Yadm = Y_admittance_path
+
+    # ------------------------------------------------------------------
     def setup_model(
         self,
         num_IRK_stages=10,
@@ -60,66 +67,42 @@ class Trainer:
         activation='tanh',
         stacked=True,
     ):
-        """Setup neural network model"""
-        
-        # Default layer sizes
         if dyn_layer_size is None:
             dyn_layer_size = [12, 64, 64, 64, num_IRK_stages + 1]
-        
         if alg_layer_size is None:
             alg_layer_size = [12, 64, 64, 18 * (num_IRK_stages + 1)]
-        
-        # Dynamic network config
+
         dynamic = dotdict({
             'num_IRK_stages': num_IRK_stages,
-            'layer_size': dyn_layer_size,
-            'activation': activation,
-            'initializer': 'Glorot normal',
-            'dropout_rate': None,
+            'layer_size':     dyn_layer_size,
+            'activation':     activation,
+            'initializer':    'Glorot normal',
+            'dropout_rate':   None,
         })
-        
-        # Algebraic network config
         algebraic = dotdict({
             'num_IRK_stages': num_IRK_stages,
-            'layer_size': alg_layer_size,
-            'activation': activation,
-            'initializer': 'Glorot normal',
-            'dropout_rate': None,
+            'layer_size':     alg_layer_size,
+            'activation':     activation,
+            'initializer':    'Glorot normal',
+            'dropout_rate':   None,
         })
-        
-        # Optional: add input feature transformation
-        def dyn_input_feature_layer(x):
-            """Fourier feature encoding"""
-            return torch.cat([
-                x,
-                torch.sin(np.pi * x),
-                torch.cos(np.pi * x),
-                torch.sin(2 * np.pi * x),
-                torch.cos(2 * np.pi * x),
-            ], dim=-1)
-        
-        def alg_output_feature_layer(x):
-            """Ensure positive voltage magnitudes"""
-            return torch.nn.functional.softplus(x)
-        
-        # Create model
+
         self.model = IEEE9Bus_PINN(
-            dynamic,
-            algebraic,
-            stacked=stacked,
-            dyn_in_transform=None,  # Can enable dyn_input_feature_layer
-            alg_out_transform=alg_output_feature_layer,
+            dynamic, algebraic, stacked=stacked,
         ).to(self.device)
-        
-        print(f"Model created with {sum(p.numel() for p in self.model.parameters())} parameters")
-    
-    def setup_data(
-        self,
-        num_train=10000,
-        num_test=1000,
-        num_IRK_stages=10,
-    ):
-        """Setup data handler"""
+
+        n_params = sum(p.numel() for p in self.model.parameters())
+        print(f"Model created: {n_params:,} parameters  (stacked={stacked})")
+
+        # store for checkpoint
+        self._num_IRK_stages = num_IRK_stages
+        self._dyn_layer_size = dyn_layer_size
+        self._alg_layer_size = alg_layer_size
+        self._activation     = activation
+        self._stacked        = stacked
+
+    # ------------------------------------------------------------------
+    def setup_data(self, num_train=10000, num_test=1000, num_IRK_stages=10):
         self.data_handler = IEEE9BusDataHandler(
             num_train=num_train,
             num_test=num_test,
@@ -127,158 +110,177 @@ class Trainer:
             state_dim=12,
             device=self.device,
         )
-    
-    def setup_optimizer(
-        self,
-        lr=1e-3,
-        scheduler_type=None,
-        patience=1000,
-        factor=0.5,
-    ):
-        """Setup optimizer and learning rate scheduler"""
+
+    # ------------------------------------------------------------------
+    def setup_optimizer(self, lr=1e-3, scheduler_type=None, patience=1000, factor=0.5):
         self.optimizer = torch.optim.Adam(self.model.parameters(), lr=lr)
-        
         if scheduler_type == 'plateau':
             self.scheduler = torch.optim.lr_scheduler.ReduceLROnPlateau(
-                self.optimizer,
-                mode='min',
-                patience=patience,
-                factor=factor,
-                verbose=True,
-            )
+                self.optimizer, mode='min', patience=patience, factor=factor, verbose=True)
         elif scheduler_type == 'step':
             self.scheduler = torch.optim.lr_scheduler.StepLR(
-                self.optimizer,
-                step_size=patience,
-                gamma=factor,
-            )
+                self.optimizer, step_size=patience, gamma=factor)
         else:
             self.scheduler = None
-    
+
+    # ------------------------------------------------------------------
+    def resume(self, checkpoint_path):
+        """Load weights from an existing checkpoint."""
+        ckpt = torch.load(checkpoint_path, map_location=self.device)
+        self.model.load_state_dict(ckpt['state_dict'])
+        self.best_loss = ckpt.get('loss', float('inf'))
+        print(f"Resumed from {checkpoint_path}  (loss={self.best_loss:.4e})")
+
+    # ------------------------------------------------------------------
     def train(
         self,
         epochs=10000,
         batch_size=None,
-        h=0.04,  # time step size
-        loss_weights=[1.0, 1.0],  # [dynamic weight, algebraic weight]
+        h=0.04,
+        loss_weights=None,
         test_every=100,
         save_every=1000,
         model_name='ieee9bus_pinn',
+        use_tqdm=True,
     ):
-        """
-        Main training loop
-        
-        Args:
-            epochs: number of training epochs
-            batch_size: batch size (None = full batch)
-            h: time step size
-            loss_weights: weights for dynamic and algebraic losses
-            test_every: test interval
-            save_every: model save interval
-            model_name: model name for saving
-        """
-        print(f"\nStarting training for {epochs} epochs...")
+        if loss_weights is None:
+            loss_weights = [1.0, 1.0]
+
+        print(f"\nStarting training for {epochs} epochs")
         print(f"Loss weights: dynamic={loss_weights[0]}, algebraic={loss_weights[1]}")
-        
-        # Get IRK weights
+
         IRK_weights = self.data_handler.get_IRK_weights()
-        h_tensor = torch.tensor([h], dtype=torch.float32).to(self.device)
-        
-        start_time = time.time()
-        
-        for epoch in tqdm(range(epochs)):
-            # Get training batch
-            X_batch = self.data_handler.get_train_batch(batch_size)
-            
-            # Forward pass
+        h_t = torch.tensor([h], dtype=torch.float32).to(self.device)
+
+        t0 = time.time()
+        iterator = tqdm(range(epochs)) if use_tqdm else range(epochs)
+
+        for epoch in iterator:
+            self.model.train()
+            X = self.data_handler.get_train_batch(batch_size)
+
             self.optimizer.zero_grad()
-            
-            # Compute physics residuals
-            f_residuals, g_residuals = self.physics.compute_IRK_residuals(
-                self.model, X_batch, h_tensor, IRK_weights, self.device
-            )
-            
-            # Compute loss
-            total_loss, loss_dict = compute_total_loss(
-                f_residuals, g_residuals, loss_weights
-            )
-            
-            # Backward pass
-            total_loss.backward()
+            f_res, g_res = self.physics.compute_IRK_residuals(
+                self.model, X, h_t, IRK_weights, str(self.device))
+            loss, loss_dict = compute_total_loss(f_res, g_res, loss_weights)
+            loss.backward()
             self.optimizer.step()
-            
-            # Update learning rate
+
             if self.scheduler is not None:
                 if isinstance(self.scheduler, torch.optim.lr_scheduler.ReduceLROnPlateau):
-                    self.scheduler.step(total_loss)
+                    self.scheduler.step(loss)
                 else:
                     self.scheduler.step()
-            
-            # Record loss
+
             self.loss_history.append(loss_dict)
-            
-            # Test and save
+
             if (epoch + 1) % test_every == 0:
-                test_loss = self._test(epoch, h_tensor, IRK_weights, loss_weights)
-                
+                test_loss = self._test(epoch, h_t, IRK_weights, loss_weights)
                 if test_loss < self.best_loss:
-                    self.best_loss = test_loss
-                    self._save_model(model_name, epoch, is_best=True)
-            
+                    self.best_loss  = test_loss
+                    self.best_epoch = epoch + 1
+                    self._save(model_name, epoch, is_best=True)
+
             if (epoch + 1) % save_every == 0:
-                self._save_model(model_name, epoch, is_best=False)
-        
-        elapsed_time = time.time() - start_time
-        print(f"\nTraining completed in {elapsed_time:.2f} seconds")
-        print(f"Best loss: {self.best_loss:.6e}")
-    
+                self._save(model_name, epoch, is_best=False)
+
+        elapsed = time.time() - t0
+        print(f"\nTraining done in {elapsed:.1f}s  |  Best loss: {self.best_loss:.4e}  @ epoch {self.best_epoch}")
+        self._save_loss_history()
+
+    # ------------------------------------------------------------------
     def _test(self, epoch, h, IRK_weights, loss_weights):
-        """Test on validation set"""
         self.model.eval()
-        
         with torch.no_grad():
-            X_test = self.data_handler.get_test_data()
-            
-            f_residuals, g_residuals = self.physics.compute_IRK_residuals(
-                self.model, X_test, h, IRK_weights, self.device
-            )
-            
-            total_loss, loss_dict = compute_total_loss(
-                f_residuals, g_residuals, loss_weights
-            )
-        
-        print(f"\nEpoch {epoch}: Test loss = {total_loss.item():.6e}, "
-              f"Dyn = {loss_dict['loss_dyn']:.6e}, Alg = {loss_dict['loss_alg']:.6e}")
-        
+            X = self.data_handler.get_test_data()
+            f_res, g_res = self.physics.compute_IRK_residuals(
+                self.model, X, h, IRK_weights, str(self.device))
+            loss, ld = compute_total_loss(f_res, g_res, loss_weights)
+        lv = loss.item()
+        print(f"\nEpoch {epoch+1:>6d} | test_total={lv:.4e}"
+              f"  dyn={ld['loss_dyn']:.4e}  alg={ld['loss_alg']:.4e}")
         self.model.train()
-        return total_loss.item()
-    
-    def _save_model(self, model_name, epoch, is_best):
-        """Save model checkpoint"""
-        if is_best:
-            filename = os.path.join(self.log_dir, f'{model_name}_best.pth')
+        return lv
+
+    # ------------------------------------------------------------------
+    def _build_checkpoint(self, epoch, loss):
+        """
+        Build a checkpoint dict compatible with plug inference code.
+        plug expects keys: state_dict, architecture, machine_parameters,
+        range_norm, voltage_stats, theta_stats, init_state
+        """
+        ph = self.physics
+
+        # machine_parameters per generator: (D, Pg, H, Xd_p, Rs)
+        machine_params = []
+        for i in range(3):
+            machine_params.append((
+                ph.D[i].item(),
+                ph.Pg[i].item(),
+                ph.H[i].item(),
+                ph.Xd_p[i].item(),
+                ph.Rs[i].item() if hasattr(ph, 'Rs') else 0.0,
+            ))
+
+        # architecture tuple: (_, num_neurons, num_layers, inputs, outputs)
+        dls = self._dyn_layer_size
+        arch = (None, dls[1], len(dls) - 2, dls[0], dls[-1])
+
+        # norm range: use state-space bounds from data handler
+        if self.data_handler is not None:
+            lo  = self.data_handler.bounds[:, 0].tolist()
+            hi  = self.data_handler.bounds[:, 1].tolist()
         else:
-            filename = os.path.join(self.log_dir, f'{model_name}_epoch{epoch}.pth')
-        
-        torch.save({
+            lo = [-1.0] * 12
+            hi = [1.0]  * 12
+        norm_range = list(zip(lo, hi))
+        lb_range   = lo
+
+        # operating limits from state-space bounds
+        voltage_limits = (0.8, 1.3)      # E'q approx range
+        theta_limits   = (-0.6, 0.6)     # delta range
+        delta_limits   = [lo[2], hi[2]]  # gen-1 delta
+        omega_limits   = [lo[3], hi[3]]  # gen-1 omega
+
+        ckpt = {
+            'state_dict':         self.model.state_dict(),
+            'architecture':       arch,
+            'machine_parameters': machine_params,
+            'range_norm':         (norm_range, lb_range),
+            'voltage_stats':      (voltage_limits,),
+            'theta_stats':        (theta_limits,),
+            'init_state':         (lo[0], lo[1], delta_limits, omega_limits),
+            'model_config': {
+                'stacked':        self._stacked,
+                'num_IRK_stages': self._num_IRK_stages,
+                'dyn_layer_size': self._dyn_layer_size,
+                'alg_layer_size': self._alg_layer_size,
+                'activation':     self._activation,
+            },
             'epoch': epoch,
-            'model_state_dict': self.model.state_dict(),
-            'optimizer_state_dict': self.optimizer.state_dict(),
-            'loss_history': self.loss_history,
-            'best_loss': self.best_loss,
-        }, filename)
-        
+            'loss':  loss,
+        }
+        return ckpt
+
+    def _save(self, model_name, epoch, is_best=False):
+        loss = self.loss_history[-1]['loss_total'] if self.loss_history else float('inf')
+        ckpt = self._build_checkpoint(epoch, loss)
+
         if is_best:
-            print(f"  → Saved best model (loss: {self.best_loss:.6e})")
-    
-    def load_model(self, model_path):
-        """Load model checkpoint"""
-        checkpoint = torch.load(model_path, map_location=self.device)
-        
-        self.model.load_state_dict(checkpoint['model_state_dict'])
-        self.optimizer.load_state_dict(checkpoint['optimizer_state_dict'])
-        self.loss_history = checkpoint['loss_history']
-        self.best_loss = checkpoint['best_loss']
-        
-        print(f"Loaded model from {model_path}")
-        print(f"  Epoch: {checkpoint['epoch']}, Best loss: {self.best_loss:.6e}")
+            path = os.path.join(self.run_dir, f'{model_name}_best.pth')
+        else:
+            path = os.path.join(self.run_dir, f'{model_name}_epoch{epoch}.pth')
+
+        torch.save(ckpt, path)
+        if is_best:
+            print(f"  → Best model saved: {path}")
+
+    def _save_loss_history(self):
+        if not self.loss_history:
+            return
+        path = os.path.join(self.run_dir, 'loss_history.npz')
+        total = np.array([d['loss_total'] for d in self.loss_history])
+        dyn   = np.array([d['loss_dyn']   for d in self.loss_history])
+        alg   = np.array([d['loss_alg']   for d in self.loss_history])
+        np.savez(path, loss_total=total, loss_dyn=dyn, loss_alg=alg)
+        print(f"Loss history saved: {path}")

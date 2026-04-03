@@ -68,15 +68,17 @@ def parse_args():
                         help='Device: cuda or cpu (default: cuda)')
     
     # Config paths
-    parser.add_argument('--config_dynamic', type=str, 
-                        default='../config_files/config_machines_dynamic.yaml',
+    parser.add_argument('--config_dynamic', type=str,
+                        default='../plug/config_files/config_machines_dynamic.yaml',
                         help='Path to dynamic config file')
     parser.add_argument('--config_static', type=str,
-                        default='../config_files/config_machines_static.yaml',
+                        default='../plug/config_files/config_machines_static.yaml',
                         help='Path to static config file')
     parser.add_argument('--Y_admittance', type=str,
-                        default='../config_files/network_admittance.pt',
+                        default='../plug/config_files/network_admittance.pt',
                         help='Path to admittance matrix')
+    parser.add_argument('--use_tqdm', action='store_true', default=True,
+                        help='Show tqdm progress bar')
     
     return parser.parse_args()
 
@@ -145,9 +147,8 @@ def main():
     
     # Resume from checkpoint if specified
     if args.resume:
-        trainer.load_model(args.resume)
-        print(f"Resumed training from {args.resume}")
-    
+        trainer.resume(args.resume)
+
     # Train
     trainer.train(
         epochs=args.epochs,
@@ -157,6 +158,7 @@ def main():
         test_every=args.test_every,
         save_every=args.save_every,
         model_name=args.model_name,
+        use_tqdm=args.use_tqdm,
     )
     
     print("\nTraining finished!")
