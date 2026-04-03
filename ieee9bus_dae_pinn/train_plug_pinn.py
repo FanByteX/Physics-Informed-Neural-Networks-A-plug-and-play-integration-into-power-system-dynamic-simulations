@@ -161,29 +161,37 @@ def generate_training_data(machine_idx, h, n_traj, n_steps, config_dir, device_s
     volt_ang = list(sta['Voltage_angle'].values())
     volt_complex = np.array(volt_mag) * np.exp(1j * np.array(volt_ang) * np.pi / 180)
 
-    # initial steady-state (from plug main.py default)
     from tds_dae_rk_schemes import TDS_simulation
-    gt_path = os.path.join(config_dir, '..', 'gt_simulations',
-                           f'sim2s_w_setpoint_3.npy')
-    gt = np.load(gt_path)
-    base_ic = torch.tensor(gt[0, :-1], dtype=torch.float64)   # shape [30]
+
+    # Load gt trajectories as initial conditions — this ensures the training
+    # data covers the same operating range as inference (including large θ drift)
+    gt_files = [
+        os.path.join(config_dir, '..', 'gt_simulations', 'sim2s_w_setpoint_3.npy'),
+        os.path.join(config_dir, '..', 'gt_simulations', 'sim10s_w_setpoint_3.npy'),
+    ]
+    gt_states_list = []
+    for gf in gt_files:
+        if os.path.isfile(gf):
+            gt_states_list.append(np.load(gf)[:, :-1])   # [T, 30]
+    gt_all = np.vstack(gt_states_list)   # [T_total, 30]
 
     # state index for machine (0-based):
     # full state: [Eq',Ed',d,w,Id,Iq,Id_g,Iq_g,Vm,Theta] × 3  = 30 vars
-    # per machine: 10 consecutive vars starting at m*10
     m = machine_idx - 1   # 0-based
 
     rng  = np.random.default_rng(42)
     inputs_list  = []
     labels_list  = []
 
-    # perturb initial conditions slightly for each trajectory
+    # Sample initial conditions from gt trajectory + small perturbations
+    # This covers the full operating range seen during inference
+    gt_indices = rng.integers(0, len(gt_all), size=n_traj)
     for traj in tqdm(range(n_traj), desc='Generating trajectories'):
-        ic = base_ic.clone()
-        # small perturbation on delta and omega of all machines
+        ic = torch.tensor(gt_all[gt_indices[traj]], dtype=torch.float64)
+        # additional small perturbation for diversity
         for g in range(3):
-            ic[g * 10 + 2] += rng.uniform(-0.05, 0.05)   # delta
-            ic[g * 10 + 3] += rng.uniform(-0.003, 0.003)  # omega
+            ic[g * 10 + 2] += rng.uniform(-0.02, 0.02)   # delta
+            ic[g * 10 + 3] += rng.uniform(-0.002, 0.002)  # omega
 
         solver = TDS_simulation(
             dampings, freq, H_vec, Xdp_vec, Yadm, pg_pf,
