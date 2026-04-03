@@ -41,7 +41,7 @@ class IEEE9BusPhysics:
         with open(dynamic_path, 'r') as f:
             dynamic_config = yaml.safe_load(f)
         
-        self.freq = dynamic_config['freq']
+        self.freq = torch.tensor(dynamic_config['freq'], dtype=torch.float32)
         self.H = torch.tensor(list(dynamic_config['inertia_H'].values()), dtype=torch.float32)
         self.Rs = torch.tensor(list(dynamic_config['Rs'].values()), dtype=torch.float32)
         self.Xd_prime = torch.tensor(list(dynamic_config['Xd_prime'].values()), dtype=torch.float32)
