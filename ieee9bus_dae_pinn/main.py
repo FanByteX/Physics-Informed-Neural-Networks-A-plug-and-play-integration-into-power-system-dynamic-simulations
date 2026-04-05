@@ -1,9 +1,15 @@
 """
 Main entry point for IEEE 9-bus DAE-PINN training
 """
+import os
+import sys
 import argparse
 import torch
 import numpy as np
+
+# Add src to path for local modules
+_HERE = os.path.dirname(os.path.abspath(__file__))
+sys.path.insert(0, os.path.join(_HERE, 'src'))
 
 from trainer import Trainer
 

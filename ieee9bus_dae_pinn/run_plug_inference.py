@@ -26,29 +26,30 @@ import torch
 
 # ── project paths ─────────────────────────────────────────────────────────────
 _HERE = os.path.dirname(os.path.abspath(__file__))
-_ROOT = os.path.abspath(os.path.join(_HERE, '..'))
 
-# plug source
-_PLUG_SRC = os.path.join(_ROOT, 'plug', 'src')
-_PLUG     = os.path.join(_ROOT, 'plug')
-sys.path.insert(0, _PLUG_SRC)
-sys.path.insert(0, _PLUG)
+# Use local src modules (independent of plug)
+_LOCAL_SRC = os.path.join(_HERE, 'src')
+sys.path.insert(0, _LOCAL_SRC)
 
 from tds_dae_rk_schemes import TDS_simulation
+
+# Use local post_processing modules (not plug's)
 from post_processing.trajectories_overview_plot import trajectories_overview
 from post_processing.custom_overview_plots import custom_overview1, custom_overview2
 
-# our FCN_simple that matches the saved weight keys
-from train_plug_pinn import FCN_simple
+# our networks that match the saved weight keys
+from train_plug_pinn import FCN_simple, FCN_RESNET
 
 
 class PINNWrapper(torch.nn.Module):
     """
-    Wraps FCN_simple to be compatible with plug's pinn_integration_scheme.
+    Wraps FCN to be compatible with plug's pinn_integration_scheme.
 
     plug passes 6-dim input: [Vm0, Vm1, theta_pend, omicron_0, omega0, h]
-    Pretrained model expects 7-dim:  [..., omicron_1, ...]
+    Our model (if trained with N_INPUT=6) expects the same 6-dim input.
     
+    For backwards compatibility with plug's pretrained models (7-dim input):
+    Pretrained model expects 7-dim:  [..., omicron_1, ...]
     Layout expected by model: [Vm0, Vm1, theta_pend, omicron_0, omicron_1, omega0, h]
     Layout from plug:         [Vm0, Vm1, theta_pend, omicron_0,            omega0, h]
 
@@ -64,14 +65,15 @@ class PINNWrapper(torch.nn.Module):
         # plug passes float64; cast to model's weight dtype
         dtype = next(self.base.parameters()).dtype
         x = x.to(dtype)
-        if x.shape[-1] == self.n_in:
-            return self.base(x)
-        elif x.shape[-1] == self.n_in - 1:
-            # insert omicron_1 = omicron_0 at position 4
-            x7 = torch.cat([x[..., :4], x[..., 3:4], x[..., 4:]], dim=-1)
-            return self.base(x7)
-        else:
-            raise ValueError(f"Unexpected input dim: {x.shape[-1]}")
+
+        if self.n_in == 7 and x.shape[-1] == 6:
+            # plug sends 6-dim: [Vm0, Vm1, theta_pend, omicron_0, omega0, h]
+            # model expects 7-dim: insert omicron_1 = omicron_0 at position 4
+            x = torch.cat([x[..., :4], x[..., 3:4], x[..., 4:]], dim=-1)
+
+        # No theta_pend wrapping needed - training data now covers [-π, π]
+        # which matches plug's pretrained model range
+        return self.base(x)
 
 
 # =============================================================================
@@ -104,19 +106,40 @@ def extract_values_static_components(cfg) -> tuple:
 
 
 # =============================================================================
-# PINN loading  (uses FCN_simple, not the broken FCN_RESNET in plug)
+# PINN loading  (auto-detects ResNet vs FCN_simple architecture)
 # =============================================================================
 
 def load_pinn_machine(pinn_path, device):
     ckpt = torch.load(pinn_path, map_location=device)
     norm_range, lb_range = ckpt['range_norm']
     arch = ckpt['architecture']
-    N_HIDDEN, N_LAYERS, N_INPUT, N_OUTPUT = arch
-    model = FCN_simple(N_INPUT, N_OUTPUT, N_HIDDEN, N_LAYERS, norm_range, lb_range)
+    
+    # Detect architecture type from checkpoint
+    arch_type = ckpt.get('architecture_type', None)
+    
+    # Parse architecture based on length
+    if len(arch) == 5:
+        # ResNet: [N_HIDDEN, N_HIDDEN_RES, N_LAYERS, N_INPUT, N_OUTPUT]
+        N_HIDDEN, N_HIDDEN_RES, N_LAYERS, N_INPUT, N_OUTPUT = arch
+        if arch_type is None:
+            arch_type = 'resnet'  # Infer from arch length
+        print(f"Loading ResNet model: hidden={N_HIDDEN}, layers={N_LAYERS}, input={N_INPUT}")
+        model = FCN_RESNET(N_INPUT, N_OUTPUT, N_HIDDEN, N_LAYERS, norm_range, lb_range)
+    elif len(arch) == 4:
+        # FCN_simple: [N_HIDDEN, N_LAYERS, N_INPUT, N_OUTPUT]
+        N_HIDDEN, N_LAYERS, N_INPUT, N_OUTPUT = arch
+        if arch_type is None:
+            arch_type = 'fcn'  # Infer from arch length
+        print(f"Loading FCN_simple model: hidden={N_HIDDEN}, layers={N_LAYERS}, input={N_INPUT}")
+        model = FCN_simple(N_INPUT, N_OUTPUT, N_HIDDEN, N_LAYERS, norm_range, lb_range)
+    else:
+        raise ValueError(f"Unknown architecture format: {arch}")
+    
     # buffers (range_states, lb_states) are not in state_dict → strict=False
     model.load_state_dict(ckpt['state_dict'], strict=False)
     model.to(device)
     model.eval()
+    
     # wrap to handle plug's 6-dim vs model's 7-dim input difference
     wrapped = PINNWrapper(model, n_input=N_INPUT)
     wrapped.to(device)
@@ -145,28 +168,28 @@ def compute_pinn_ops_limits(pinn_path) -> tuple:
 # =============================================================================
 
 def load_ini_conditions_true(args, start_value=0):
-    gt_dir    = os.path.join(_PLUG, 'gt_simulations')
+    gt_dir    = os.path.join(_HERE, 'gt_simulations')
     file_name = f'sim{int(args.sim_time)}s_{args.event_type}_{args.event_location}.npy'
     states    = np.load(os.path.join(gt_dir, file_name))
     return torch.tensor(states[start_value, :-1], dtype=torch.float64)
 
 
 def load_ini_conditions_true_option4(args, start_value=0):
-    gt_dir = os.path.join(_PLUG, 'gt_simulations')
+    gt_dir = os.path.join(_HERE, 'gt_simulations')
     states = np.load(os.path.join(gt_dir,
                      f'sim10s_{args.event_type}_{args.event_location}.npy'))
     return torch.tensor(states[start_value, :-1], dtype=torch.float64)
 
 
 def return_true_solution(args):
-    gt_dir    = os.path.join(_PLUG, 'gt_simulations')
+    gt_dir    = os.path.join(_HERE, 'gt_simulations')
     file_name = f'sim{int(args.sim_time)}s_{args.event_type}_{args.event_location}.npy'
     states    = np.load(os.path.join(gt_dir, file_name))
     return states[:, 30], states[:, :-1]
 
 
 def return_true_solution_option4(args, start=0, end=-1):
-    gt_dir = os.path.join(_PLUG, 'gt_simulations')
+    gt_dir = os.path.join(_HERE, 'gt_simulations')
     states = np.load(os.path.join(gt_dir,
                      f'sim10s_{args.event_type}_{args.event_location}.npy'))
     return states[start:end, 30], states[start:end, :-1]
@@ -257,7 +280,8 @@ def parse_args():
     p.add_argument('--compare_ground_truth',   action='store_true', default=True)
     p.add_argument('--gpu',              type=int,   default=0)
     p.add_argument('--save_fig',         action='store_true', default=True)
-    p.add_argument('--out_dir',          type=str,   default='./outputs')
+    p.add_argument('--out_dir',          type=str,   default=None,
+                   help='Output directory (default: ./outputs/machine{N})')
     return p.parse_args()
 
 
@@ -266,14 +290,14 @@ def main():
     device = torch.device(f'cuda:{args.gpu}' if torch.cuda.is_available() else 'cpu')
     print(f"Device: {device}")
 
-    cfg_dir = os.path.join(_PLUG, 'config_files')
+    cfg_dir = os.path.join(_HERE, 'config_files')
 
     # ── choose PINN path ──────────────────────────────────────────────────────
     if args.pinn_path is None:
-        # fall back to plug's pretrained model
-        args.pinn_path = os.path.join(_PLUG, 'final_models',
+        # use local pretrained model
+        args.pinn_path = os.path.join(_HERE, 'final_models',
                                       f'model_DAE_machine_{args.machine}.pth')
-        print(f"Using pretrained plug model: {args.pinn_path}")
+        print(f"Using local pretrained model: {args.pinn_path}")
     else:
         print(f"Using custom PINN: {args.pinn_path}")
 
@@ -303,7 +327,7 @@ def main():
     _check('D',    dampings[m], D_pinn)
 
     # ── initial conditions ─────────────────────────────────────────────────────
-    gt_file = os.path.join(_PLUG, 'gt_simulations',
+    gt_file = os.path.join(_HERE, 'gt_simulations',
                            f'sim{int(args.sim_time)}s_{args.event_type}_{args.event_location}.npy')
     has_gt  = os.path.isfile(gt_file)
     if not has_gt:
@@ -312,6 +336,9 @@ def main():
 
     ini_cond_sim = load_ini_conditions_true(args, start_value=0)
 
+    # Set output directory based on machine number
+    if args.out_dir is None:
+        args.out_dir = f'./outputs/machine{args.machine}'
     os.makedirs(args.out_dir, exist_ok=True)
 
     h    = args.time_step_size
@@ -338,8 +365,10 @@ def main():
         t_true, s_true  = return_true_solution(args)
         plot = trajectories_overview(t_f, t_pinn, s_pinn, t_pure, s_pure, t_true, s_true)
         plot.compute_results(pure_rk_scheme=True, assimulo_states=True)
+        fig_name = f'Figure_1_machine{args.machine}'
         plot.show_results(save_fig=args.save_fig,
-                          fname=os.path.join(args.out_dir, 'Figure_1.png') if args.save_fig else None)
+                          filename=fig_name,
+                          output_dir=args.out_dir)
 
     elif args.study_selection == 2:
         t_pure, s_pure = make_pure_solver(h).simulation_main_loop(args.rk_scheme)
@@ -353,6 +382,12 @@ def main():
         plot.trajectory_and_errors_plot(8, 10, t_true, s_true, s_pure, s_pinn)
         fig_name = 'Figure_4' if t_f == 10 else 'Figure_5'
         plot.show_results(filename=os.path.join(args.out_dir, fig_name) if args.save_fig else fig_name)
+        # 保存仿真结果用于调试
+        np.savez(os.path.join(args.out_dir, 'sim_results.npz'),
+                 t_pure=t_pure, s_pure=s_pure,
+                 t_pinn=t_pinn, s_pinn=s_pinn,
+                 t_true=t_true, s_true=s_true)
+        print(f"仿真结果已保存到: {os.path.join(args.out_dir, 'sim_results.npz')}")
 
     elif args.study_selection == 3:
         timesteps = [5e-3, 8e-3, 0.01, 0.02, 0.025, 0.04]
