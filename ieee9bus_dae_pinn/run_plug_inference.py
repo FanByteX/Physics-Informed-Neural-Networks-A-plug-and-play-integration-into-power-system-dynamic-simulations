@@ -378,7 +378,7 @@ def main():
         ratio          = compute_time_step_ratio(h, dt_assimulo)
         err_pure = errors_analysis(t_pure, s_pure, t_true, s_true, ratio)
         err_pinn = errors_analysis(t_pinn, s_pinn, t_true, s_true, ratio)
-        plot = custom_overview1(t_f, t_pure, err_pure, t_pinn, err_pinn)
+        plot = custom_overview1(t_f, t_pure, err_pure, t_pinn, err_pinn, machine_idx=args.machine)
         plot.trajectory_and_errors_plot(8, 10, t_true, s_true, s_pure, s_pinn)
         fig_name = 'Figure_4' if t_f == 10 else 'Figure_5'
         plot.show_results(filename=os.path.join(args.out_dir, fig_name) if args.save_fig else fig_name)

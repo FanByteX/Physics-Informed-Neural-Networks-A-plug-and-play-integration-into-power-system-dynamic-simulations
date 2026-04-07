@@ -6,7 +6,11 @@ import matplotlib.gridspec as gridspec
 import os
 
 class custom_overview1:
-    def __init__(self, sim_time, t_test_solver1, errors_solver1, t_test_solver2, errors_solver2) -> None:
+    def __init__(self, sim_time, t_test_solver1, errors_solver1, t_test_solver2, errors_solver2, machine_idx=3) -> None:
+        """
+        Args:
+            machine_idx: 1, 2, or 3 (1-based) - which generator to plot
+        """
         assert sim_time > 0
         assert t_test_solver1[-1] == sim_time
         assert t_test_solver2[-1] == sim_time
@@ -16,6 +20,13 @@ class custom_overview1:
         self.errors_solver1 = errors_solver1
         self.errors_solver2 = errors_solver2
         self.num_plots = errors_solver1.shape[1]
+        # State vector: [Eq', Ed', delta, omega, Id, Iq, Id_g, Iq_g, Vm, Theta] × 3 = 30 vars
+        # For machine m (0-based): delta = m*10 + 2, Vm = m*10 + 8, Theta = m*10 + 9
+        m = machine_idx - 1  # convert to 0-based
+        self.delta_idx = m * 10 + 2
+        self.vm_idx = m * 10 + 8
+        self.theta_idx = m * 10 + 9
+        self.machine_idx = machine_idx
         if len(t_test_solver1) > errors_solver1.shape[0]:
             self.errors_solver1 = self.add_zeros_initial_value(errors_solver1)
         if len(t_test_solver2) > errors_solver2.shape[0]:
@@ -28,21 +39,22 @@ class custom_overview1:
         fig = plt.figure(figsize=(14, 10))
         gs = gridspec.GridSpec(1, 2)
         ax0 = plt.subplot(gs[0, 0])
-        ax0.set_title('Delta_Theta Gen. 3')
+        ax0.set_title(f'Delta_Theta Gen. {self.machine_idx}')
         ax0.grid()
         ax1 = plt.subplot(gs[0, 1])
-        ax1.set_title('Voltage magnitude Gen. 3')
+        ax1.set_title(f'Voltage magnitude Gen. {self.machine_idx}')
         ax1.grid()
 
-        ax0.plot(time_array_true, states_array_true[:, 22]-states_array_true[:, 29], color='k', linestyle='--')
-        ax0.plot(self.t_test_solver1, states_array_pure[:, 22]- states_array_pure[:, 29], color='orange', linestyle='-') # , marker='x', markersize=6
-        ax0.plot(self.t_test_solver2, states_array_hybrid[:, 22]- states_array_hybrid[:, 29], color='blue', linestyle='-') # , marker='o', markersize=6
+        # Use dynamic indices based on machine_idx
+        ax0.plot(time_array_true, states_array_true[:, self.delta_idx]-states_array_true[:, self.theta_idx], color='k', linestyle='--')
+        ax0.plot(self.t_test_solver1, states_array_pure[:, self.delta_idx]- states_array_pure[:, self.theta_idx], color='orange', linestyle='-') # , marker='x', markersize=6
+        ax0.plot(self.t_test_solver2, states_array_hybrid[:, self.delta_idx]- states_array_hybrid[:, self.theta_idx], color='blue', linestyle='-') # , marker='o', markersize=6
         ax0.set_ylabel('Delta-Theta [rad]')
         ax0.set_xlabel('Time [s]')
 
-        ax1.plot(time_array_true, states_array_true[:, 28], color='k', linestyle='--')
-        ax1.plot(self.t_test_solver1, states_array_pure[:, 28], color='orange', linestyle='-') # , marker='x', markersize=6
-        ax1.plot(self.t_test_solver2, states_array_hybrid[:, 28], color='blue', linestyle='-') # , marker='o', markersize=6
+        ax1.plot(time_array_true, states_array_true[:, self.vm_idx], color='k', linestyle='--')
+        ax1.plot(self.t_test_solver1, states_array_pure[:, self.vm_idx], color='orange', linestyle='-') # , marker='x', markersize=6
+        ax1.plot(self.t_test_solver2, states_array_hybrid[:, self.vm_idx], color='blue', linestyle='-') # , marker='o', markersize=6
         ax1.set_ylabel('Voltage magnitude [p.u.]')
         ax1.set_xlabel('Time [s]')
 
@@ -74,10 +86,12 @@ class custom_overview1:
     
     def show_results(self, save_fig=False, filename='Figure_4'):
         plt.tight_layout()
-        os.makedirs('outputs', exist_ok=True)
-        save_path = os.path.join('outputs', f'{filename}.png')
-        plt.savefig(save_path, dpi=150)
-        print(f'图片已保存：{save_path}')
+        # filename is already a full path, use it directly
+        if not filename.endswith('.png'):
+            filename = f'{filename}.png'
+        os.makedirs(os.path.dirname(filename), exist_ok=True)
+        plt.savefig(filename, dpi=150)
+        print(f'图片已保存：{filename}')
         plt.close()
 
 class custom_overview2:
@@ -102,8 +116,9 @@ class custom_overview2:
         ax1.set_ylabel('l1 errors')
         ax1.legend()
         plt.tight_layout()
-        os.makedirs('outputs', exist_ok=True)
-        save_path = os.path.join('outputs', 'Figure_6.png')
-        plt.savefig(save_path, dpi=150)
-        print(f'图片已保存：{save_path}')
+        # filename is already a full path, use it directly
+        filename = 'Figure_6.png'
+        os.makedirs(os.path.dirname(filename), exist_ok=True)
+        plt.savefig(filename, dpi=150)
+        print(f'图片已保存：{filename}')
         plt.close()

@@ -55,6 +55,7 @@ from tqdm import tqdm
 
 # ── Use local src modules (independent of plug) ───────────────────────────────
 _HERE = os.path.dirname(os.path.abspath(__file__))
+_ROOT = os.path.dirname(_HERE)   # project root: /home/PINNs-Plug-n-Play-Integration
 sys.path.insert(0, os.path.join(_HERE, 'src'))
 
 import yaml

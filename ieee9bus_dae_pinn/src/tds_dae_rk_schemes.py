@@ -143,12 +143,13 @@ class TDS_simulation():
         res_1 =  self.rk_integration_scheme((Ed_prime1_0, Ed_prime1), (), self.dif_equation_ded, 0)
         if self.pinn_boost == 1:
             theta_pend, omicron_0 = self.calculate_new_reference(Theta1_0, Theta1, delta1_0)
-            inputs_pinn = [Vm1_0.item(), theta_pend.item(), omicron_0.item(), omega1_0.item()]
-            self.check_pinn_limits(inputs_pinn)
+            inputs_pinn = [Vm1_0.item(), Vm1.item(), theta_pend.item(), omicron_0.item(), omega1_0.item(), self.step_size.item()]
+            self.check_pinn_limits(inputs_pinn[:4])  # 只检查前4个参数
+            # PINN输入顺序: [Vm_0, Vm_1, theta_pend, omicron_0, omega_0, h]
             pinn_input_data = torch.cat([Vm1_0.view(-1,1), Vm1.view(-1,1), theta_pend.view(-1,1), omicron_0.view(-1,1), omega1_0.view(-1,1), self.step_size.view(-1,1)], dim=1)
             d_values_pinn = self.pinn_integration_scheme(pinn_input_data)
             res_2 = delta1 - self.step_size*d_values_pinn[0] - omicron_0 - theta_pend*self.step_size - Theta1_0
-            res_3 = omega1 - omega3_0 -self.step_size*d_values_pinn[1]
+            res_3 = omega1 - omega1_0 - self.step_size*d_values_pinn[1]
         else:
             res_2 =  self.rk_integration_scheme((delta1_0, delta1), (omega1_0, omega1), self.dif_equation_ddelta, 0)
             res_3 =  self.rk_integration_scheme((omega1_0, omega1), (Eq_prime1_0, Eq_prime1, Ed_prime1_0, Ed_prime1, Id1_0, Id1, Iq1_0, Iq1), self.dif_equation_dw, 0)
