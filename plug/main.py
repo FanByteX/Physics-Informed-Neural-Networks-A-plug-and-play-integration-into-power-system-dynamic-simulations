@@ -24,7 +24,7 @@ parser.add_argument('--time_step_size', type=float, default=4e-2)
 parser.add_argument('--rk_scheme', choices=['trapezoidal', 'backward_euler'], default='trapezoidal')
 parser.add_argument('--compare_pure_RKscheme', action='store_true')
 parser.add_argument('--compare_ground_truth', action='store_true', default=True)
-parser.add_argument('--study_selection', type=int, choices=[1, 2, 3, 4, 5], default=2)
+parser.add_argument('--study_selection', type=int, choices=[1, 2, 3, 4, 5, 6], default=2)
 parser.add_argument('--gpu', type=int, default=0)
 args = parser.parse_args()
 
@@ -173,28 +173,39 @@ def errors_analysis(t_sim_array, studied_states, t_sim_assimulo, states_array_as
 if __name__ == "__main__":
 
     pinn_directory = './final_models/'
-    pinn_name  = f'model_DAE_machine_{args.machine}.pth'
-
-    pinn_location = os.path.join(pinn_directory, pinn_name)
-
-    simulation_pinn = load_pinn_machine(pinn_location)
+    
+    # study_selection=6 需要加载所有3个PINN模型
+    if args.study_selection == 6:
+        simulation_pinn_list = []
+        pinn_ops_limits_list = []
+        for machine_id in [1, 2, 3]:
+            pinn_name = f'model_DAE_machine_{machine_id}.pth'
+            pinn_location = os.path.join(pinn_directory, pinn_name)
+            simulation_pinn_list.append(load_pinn_machine(pinn_location))
+            pinn_ops_limits_list.append(compute_pinn_ops_limits(pinn_location))
+        simulation_pinn = simulation_pinn_list
+        pinn_ops_limits = pinn_ops_limits_list
+    else:
+        pinn_name  = f'model_DAE_machine_{args.machine}.pth'
+        pinn_location = os.path.join(pinn_directory, pinn_name)
+        simulation_pinn = load_pinn_machine(pinn_location)
+        pinn_ops_limits = compute_pinn_ops_limits(pinn_location)
 
     parameters_dc_raw = config_file('./config_files/config_machines_dynamic.yaml')
     freq, H, Rs, Xd_p, pg_pf, dampings = extract_values_dynamic_components(parameters_dc_raw)
     assert len(H)     == 3; assert len(Rs)       == 3; assert len(Xd_p) == 3
     assert len(pg_pf) == 3; assert len(dampings) == 3
 
-    parameters_pinn = load_pinn_parameters(pinn_location)
-
-    assert H[args.machine-1] == parameters_pinn[0]
-    assert Xd_p[args.machine-1] == parameters_pinn[1]
-    assert pg_pf[args.machine-1] == parameters_pinn[2]
-    assert dampings[args.machine-1] == parameters_pinn[3]
+    # study_selection=6 时跳过单个机器的参数验证
+    if args.study_selection != 6:
+        parameters_pinn = load_pinn_parameters(pinn_location)
+        assert H[args.machine-1] == parameters_pinn[0]
+        assert Xd_p[args.machine-1] == parameters_pinn[1]
+        assert pg_pf[args.machine-1] == parameters_pinn[2]
+        assert dampings[args.machine-1] == parameters_pinn[3]
 
     assert all(damp > 0 for damp in dampings)
     assert all(inertia > 0 for inertia in H)
-
-    pinn_ops_limits = compute_pinn_ops_limits(pinn_location)
 
     Yadmittance = torch.load('./config_files/network_admittance.pt')
 
@@ -217,7 +228,7 @@ if __name__ == "__main__":
         t_true, states_true = return_true_solution()
         plotting = trajectories_overview(args.sim_time, t_evo_pinn, states_evo_pinn, t_test_pure_rk, states_evo, t_true, states_true)
         plotting.compute_results(pure_rk_scheme=True, assimulo_states=True)
-        plotting.show_results(save_fig=False)
+        plotting.show_results(save_fig=True, filename='Figure_1')
     
     elif args.study_selection == 2:
         solver_pure_rk_method = TDS_simulation(dampings, freq, H, Xd_p, Yadmittance, pg_pf, ini_cond_sim, t_final=t_final_simulations, step_size=step_size_pure_rk)
@@ -262,10 +273,10 @@ if __name__ == "__main__":
         fig = plt.figure(figsize=(14, 10))
         gs = gridspec.GridSpec(1, 2)
         ax0 = plt.subplot(gs[0, 0])
-        ax0.set_title('Delta_Theta Gen. 3')
+        ax0.set_title(r'$\delta_3 - \omega_3$')
         ax0.grid()
         ax1 = plt.subplot(gs[0, 1])
-        ax1.set_title('Voltage magnitude Gen. 3')
+        ax1.set_title(r'$V_{m,3}$')
         ax1.grid()
         t_true_complete, states_true_complete = return_true_solution_option4()
         time_step_assimulo = compute_time_step_assimulo(t_true_complete)
@@ -349,9 +360,9 @@ if __name__ == "__main__":
         for i, state_plot in enumerate(plotting_states_final):
             ax = plt.subplot(gs[0, i])
             if i ==0:
-                ax.set_title('Delta3-Omega3')
+                ax.set_title(r'$\delta_3 - \omega_3$')
             else:
-                ax.set_title('Voltage magnitude 3')
+                ax.set_title(r'$V_{m,3}$')
             ax.plot(timesteps_to_study, error_dist_per_timestep_pure[:,state_plot], color='r', linestyle = '-', label='trapz')
             ax.plot(timesteps_to_study, error_dist_per_timestep_hybrid[:,state_plot],  color='g', linestyle= '-', label='PINN-trapz')
             ax.plot(timesteps_to_study, error_dist_per_timestep_pure[:,state_plot+12], color='r', linestyle = '--')
@@ -365,3 +376,15 @@ if __name__ == "__main__":
         plt.savefig('outputs/Figure_8.png', dpi=150)
         print('图片已保存：outputs/Figure_8.png')
         plt.close()
+    
+    elif args.study_selection == 6:
+        # 同时加载3个PINN模型，对3台机器分别进行加速
+        solver_pure_rk_method = TDS_simulation(dampings, freq, H, Xd_p, Yadmittance, pg_pf, ini_cond_sim, t_final=t_final_simulations, step_size=step_size_pure_rk)
+        t_test_pure_rk, states_evo = solver_pure_rk_method.simulation_main_loop(integration_scheme=args.rk_scheme)
+        solver_hybrid_pinn = TDS_simulation(dampings, freq, H, Xd_p, Yadmittance, pg_pf, ini_cond_sim, t_final=t_final_simulations, step_size=step_size_hybrid_rk, 
+                                            pinn_boost='all', pinn_weights=simulation_pinn, pinn_limits=pinn_ops_limits)
+        t_evo_pinn, states_evo_pinn = solver_hybrid_pinn.simulation_main_loop(integration_scheme=args.rk_scheme)
+        t_true, states_true = return_true_solution()
+        plotting = trajectories_overview(args.sim_time, t_evo_pinn, states_evo_pinn, t_test_pure_rk, states_evo, t_true, states_true)
+        plotting.compute_results(pure_rk_scheme=True, assimulo_states=True)
+        plotting.show_results(save_fig=True, filename='Figure_9')
