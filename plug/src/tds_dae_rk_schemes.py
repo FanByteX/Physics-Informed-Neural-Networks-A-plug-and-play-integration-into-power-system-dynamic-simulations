@@ -15,7 +15,16 @@ class TDS_simulation():
         self.Yadmittance = Y_adm
         self.pg_pf = torch.tensor(pg_pf, dtype=torch.float64)
         self.pinn_boost = pinn_boost
-        if type(pinn_boost) == int:
+        # 支持同时加载3个PINN模型
+        if pinn_boost == 'all':
+            assert pinn_weights is not None and pinn_limits is not None
+            assert len(pinn_weights) == 3 and len(pinn_limits) == 3
+            self.pinn_check = pinn_weights  # list of 3 PINN models
+            self.limits_v = [pinn_limits[i][0] for i in range(3)]
+            self.limits_theta = [pinn_limits[i][1] for i in range(3)]
+            self.limits_delta = [pinn_limits[i][2] for i in range(3)]
+            self.limits_omega = [pinn_limits[i][3] for i in range(3)]
+        elif type(pinn_boost) == int:
             assert pinn_boost in [1,2,3]
             assert pinn_weights is not None and pinn_limits is not None
             self.upload_pinn_to_dae(pinn_weights, pinn_limits)
@@ -86,16 +95,20 @@ class TDS_simulation():
         computation_be = state_1 - state_0 - self.step_size*d_state_1
         return computation_be
     
-    def check_pinn_limits(self, pinn_inputs) -> None:
+    def check_pinn_limits(self, pinn_inputs, machine_idx=0) -> None:
         value_vm_check, value_theta_check, value_delta_check, value_omega_check = pinn_inputs
-        if self.limits_v[0] > value_vm_check or self.limits_v[1] < value_vm_check:
-            print('Voltage_Careful', self.limits_v, value_vm_check)
-        if self.limits_theta[0] > value_theta_check or self.limits_theta[1] < value_theta_check:
-            print('Theta_Careful', self.limits_theta, value_theta_check)
-        if self.limits_delta[0] > value_delta_check or self.limits_delta[1] < value_delta_check:
-            print('Delta_Careful', self.limits_delta, value_delta_check)
-        if self.limits_omega[0] > value_omega_check or self.limits_omega[1] < value_omega_check:
-            print('Omega_Careful', self.limits_omega, value_omega_check)
+        limits_v = self.limits_v[machine_idx] if isinstance(self.limits_v, list) else self.limits_v
+        limits_theta = self.limits_theta[machine_idx] if isinstance(self.limits_theta, list) else self.limits_theta
+        limits_delta = self.limits_delta[machine_idx] if isinstance(self.limits_delta, list) else self.limits_delta
+        limits_omega = self.limits_omega[machine_idx] if isinstance(self.limits_omega, list) else self.limits_omega
+        if limits_v[0] > value_vm_check or limits_v[1] < value_vm_check:
+            print(f'Voltage_Careful Machine {machine_idx+1}', limits_v, value_vm_check)
+        if limits_theta[0] > value_theta_check or limits_theta[1] < value_theta_check:
+            print(f'Theta_Careful Machine {machine_idx+1}', limits_theta, value_theta_check)
+        if limits_delta[0] > value_delta_check or limits_delta[1] < value_delta_check:
+            print(f'Delta_Careful Machine {machine_idx+1}', limits_delta, value_delta_check)
+        if limits_omega[0] > value_omega_check or limits_omega[1] < value_omega_check:
+            print(f'Omega_Careful Machine {machine_idx+1}', limits_omega, value_omega_check)
     
     def rk_integration_scheme(self, diffstate, input_states, func, no_machine) -> torch.Tensor:
         if self.integration_scheme == 'trapezoidal':
@@ -104,10 +117,11 @@ class TDS_simulation():
             output_computation = self.backward_euler_func(diffstate, input_states, func, no_machine)
         return output_computation
     
-    def pinn_integration_scheme(self, pinn_input) -> tuple:
-        device = next(self.pinn_check.parameters()).device
+    def pinn_integration_scheme(self, pinn_input, machine_idx=0) -> tuple:
+        pinn_model = self.pinn_check[machine_idx] if isinstance(self.pinn_check, list) else self.pinn_check
+        device = next(pinn_model.parameters()).device
         pinn_input = pinn_input.to(device)
-        preds_pinn = self.pinn_check(pinn_input)
+        preds_pinn = pinn_model(pinn_input)
         d_delta = preds_pinn[:, 0:1][0][0].cpu()
         d_omega = preds_pinn[:, 1:2][0][0].cpu()
         return d_delta, d_omega
@@ -141,14 +155,14 @@ class TDS_simulation():
         Theta1, Theta2, Theta3          = states_x1[9], states_x1[19], states_x1[29]       
         res_0 =  self.rk_integration_scheme((Eq_prime1_0, Eq_prime1), (), self.dif_equation_deq, 0)
         res_1 =  self.rk_integration_scheme((Ed_prime1_0, Ed_prime1), (), self.dif_equation_ded, 0)
-        if self.pinn_boost == 1:
+        if self.pinn_boost == 1 or self.pinn_boost == 'all':
             theta_pend, omicron_0 = self.calculate_new_reference(Theta1_0, Theta1, delta1_0)
             inputs_pinn = [Vm1_0.item(), theta_pend.item(), omicron_0.item(), omega1_0.item()]
-            self.check_pinn_limits(inputs_pinn)
+            self.check_pinn_limits(inputs_pinn, machine_idx=0)
             pinn_input_data = torch.cat([Vm1_0.view(-1,1), Vm1.view(-1,1), theta_pend.view(-1,1), omicron_0.view(-1,1), omega1_0.view(-1,1), self.step_size.view(-1,1)], dim=1)
-            d_values_pinn = self.pinn_integration_scheme(pinn_input_data)
+            d_values_pinn = self.pinn_integration_scheme(pinn_input_data, machine_idx=0)
             res_2 = delta1 - self.step_size*d_values_pinn[0] - omicron_0 - theta_pend*self.step_size - Theta1_0
-            res_3 = omega1 - omega3_0 -self.step_size*d_values_pinn[1]
+            res_3 = omega1 - omega1_0 -self.step_size*d_values_pinn[1]
         else:
             res_2 =  self.rk_integration_scheme((delta1_0, delta1), (omega1_0, omega1), self.dif_equation_ddelta, 0)
             res_3 =  self.rk_integration_scheme((omega1_0, omega1), (Eq_prime1_0, Eq_prime1, Ed_prime1_0, Ed_prime1, Id1_0, Id1, Iq1_0, Iq1), self.dif_equation_dw, 0)
@@ -162,12 +176,12 @@ class TDS_simulation():
         res_9 =  Iq_g_1 - torch.imag(current_inj_m1)
         res_10 = self.rk_integration_scheme((Eq_prime2_0, Eq_prime2), (), self.dif_equation_deq, 1)
         res_11 = self.rk_integration_scheme((Ed_prime2_0, Ed_prime2), (), self.dif_equation_ded, 1)
-        if self.pinn_boost == 2:
+        if self.pinn_boost == 2 or self.pinn_boost == 'all':
             theta_pend, omicron_0 = self.calculate_new_reference(Theta2_0, Theta2, delta2_0)
             inputs_pinn = [Vm2_0.item(), theta_pend.item(), omicron_0.item(), omega2_0.item()]
-            self.check_pinn_limits(inputs_pinn)
+            self.check_pinn_limits(inputs_pinn, machine_idx=1)
             pinn_input_data = torch.cat([Vm2_0.view(-1,1), Vm2.view(-1,1), theta_pend.view(-1,1), omicron_0.view(-1,1), omega2_0.view(-1,1), self.step_size.view(-1,1)], dim=1)
-            d_values_pinn = self.pinn_integration_scheme(pinn_input_data)
+            d_values_pinn = self.pinn_integration_scheme(pinn_input_data, machine_idx=1)
             res_12 = delta2 - self.step_size*d_values_pinn[0] - omicron_0 - theta_pend*self.step_size - Theta2_0
             res_13 = omega2 - omega2_0 -self.step_size*d_values_pinn[1]
         else:
@@ -183,12 +197,12 @@ class TDS_simulation():
         res_19 =  Iq_g_2 - torch.imag(current_inj_m2)
         res_20 = self.rk_integration_scheme((Eq_prime3_0, Eq_prime3), (), self.dif_equation_deq, 2)
         res_21 = self.rk_integration_scheme((Ed_prime3_0, Ed_prime3), (), self.dif_equation_ded, 2)
-        if self.pinn_boost == 3:
+        if self.pinn_boost == 3 or self.pinn_boost == 'all':
             theta_pend, omicron_0 = self.calculate_new_reference(Theta3_0, Theta3, delta3_0)
             inputs_pinn = [Vm3_0.item(), theta_pend.item(), omicron_0.item(), omega3_0.item()]
-            self.check_pinn_limits(inputs_pinn)
+            self.check_pinn_limits(inputs_pinn, machine_idx=2)
             pinn_input_data = torch.cat([Vm3_0.view(-1,1), Vm3.view(-1,1), theta_pend.view(-1,1), omicron_0.view(-1,1), omega3_0.view(-1,1), self.step_size.view(-1,1)], dim=1)
-            d_values_pinn = self.pinn_integration_scheme(pinn_input_data)
+            d_values_pinn = self.pinn_integration_scheme(pinn_input_data, machine_idx=2)
             res_22 = delta3 - self.step_size*d_values_pinn[0] - omicron_0 - theta_pend*self.step_size - Theta3_0
             res_23 = omega3 - omega3_0 -self.step_size*d_values_pinn[1]
         else:

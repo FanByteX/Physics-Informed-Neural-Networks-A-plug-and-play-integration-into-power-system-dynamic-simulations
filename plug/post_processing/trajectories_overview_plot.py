@@ -49,13 +49,13 @@ class trajectories_overview:
         ax0_m1_pinn, = ax0.plot(self.t_test_rk_pinn_boost, self.compute_gradient_delta_theta(self.states_rk_pinn_boost, 1), 'r-') 
         ax0_m2_pinn, = ax0.plot(self.t_test_rk_pinn_boost, self.compute_gradient_delta_theta(self.states_rk_pinn_boost, 2), 'g-') 
         ax0_m3_pinn, = ax0.plot(self.t_test_rk_pinn_boost, self.compute_gradient_delta_theta(self.states_rk_pinn_boost, 3), 'b-') 
-        ax0.set_title('Gradient delta-theta evolution')
+        ax0.set_title(r'$\delta - \theta$ Evolution')
 
         ax1 = plt.subplot(gs[0, 1])
         ax1_m1_pinn, = ax1.plot(self.t_test_rk_pinn_boost, self.compute_omegas(self.states_rk_pinn_boost, 1), 'r-')
         ax1_m2_pinn, = ax1.plot(self.t_test_rk_pinn_boost, self.compute_omegas(self.states_rk_pinn_boost, 2), 'g-')
         ax1_m3_pinn, = ax1.plot(self.t_test_rk_pinn_boost, self.compute_omegas(self.states_rk_pinn_boost, 3), 'b-')
-        ax1.set_title('Omegas evolution')
+        ax1.set_title(r'$\omega$ Evolution')
 
         complex_currents_pinn1, complex_currents_pinn2, complex_currents_pinn3 = self.currents_calculation(self.states_rk_pinn_boost)
         
@@ -63,27 +63,27 @@ class trajectories_overview:
         ax2.plot(self.t_test_rk_pinn_boost, np.real(complex_currents_pinn1), 'r-', label='Machine 1')
         ax2.plot(self.t_test_rk_pinn_boost, np.real(complex_currents_pinn2), 'g-', label='Machine 2')
         ax2.plot(self.t_test_rk_pinn_boost, np.real(complex_currents_pinn3), 'b-', label='Machine 3')
-        ax2.set_title('ID evolution')
+        ax2.set_title(r'$I_d$ Evolution')
         ax2.legend()
 
         ax3 = plt.subplot(gs[1, 1])
         ax3.plot(self.t_test_rk_pinn_boost, np.imag(complex_currents_pinn1), 'r-', label='Machine 1')
         ax3.plot(self.t_test_rk_pinn_boost, np.imag(complex_currents_pinn2), 'g-', label='Machine 2')
         ax3.plot(self.t_test_rk_pinn_boost, np.imag(complex_currents_pinn3), 'b-', label='Machine 3')
-        ax3.set_title('IQ evolution')
+        ax3.set_title(r'$I_q$ Evolution')
         ax3.legend()
 
         ax4 = plt.subplot(gs[2, 0])
         ax4_m1_pinn, = ax4.plot(self.t_test_rk_pinn_boost, self.states_rk_pinn_boost[:,  8], 'r-')
         ax4_m2_pinn, = ax4.plot(self.t_test_rk_pinn_boost, self.states_rk_pinn_boost[:, 18], 'g-')
         ax4_m3_pinn, = ax4.plot(self.t_test_rk_pinn_boost, self.states_rk_pinn_boost[:, 28], 'b-')
-        ax4.set_title('Vm evolution')
+        ax4.set_title(r'$V_m$ Evolution')
 
         ax5 = plt.subplot(gs[2, 1])
         ax5_m1_pinn, = ax5.plot(self.t_test_rk_pinn_boost, self.compute_theta_reference(self.states_rk_pinn_boost, 1, 2), 'r-')                   
         ax5_m2_pinn, = ax5.plot(self.t_test_rk_pinn_boost, self.compute_theta_reference(self.states_rk_pinn_boost, 1, 3), 'g-')         
         ax5_m3_pinn, = ax5.plot(self.t_test_rk_pinn_boost, self.compute_theta_reference(self.states_rk_pinn_boost, 2, 3), 'b-')         
-        ax5.set_title('Thetas evolution')
+        ax5.set_title(r'$\theta$ Evolution')
 
         if pure_rk_scheme:
             assert self.t_test_rk[-1] == self.simulation_range
