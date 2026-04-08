@@ -1,0 +1,26 @@
+starting...
+
+================================================================================
+Lines fault training - b=5
+================================================================================
+
+============================================================
+🚀 Initializing Distributed Training on Multi-NPU
+============================================================
+📍Rank 0/4 initialized
+✅ Rank 0: Using device NPU-0
+📋 Rank 0: Logs directory: logs/mindspore_pinn_4npu
+============================================================
+Rank 0: Generated 6000 training samples (独立数据分片)
+Warning: LR scheduler not fully supported in MindSpore, using fixed LR
+Compiling supervisor...
+
+'compile' took 0.000037 s
+
+✅ Checkpoint best loss initialized to: 4.795686e-06
+starting from best model so far...
+Loading model from: logs/mindspore_pinn_4npu/model.ckpt
+Network weights loaded successfully.
+No optimizer state found in checkpoint.
+Training model...
+
