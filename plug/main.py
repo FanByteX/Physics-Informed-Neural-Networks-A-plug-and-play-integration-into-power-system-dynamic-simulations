@@ -309,7 +309,7 @@ if __name__ == "__main__":
         plt.close()
     
     elif args.study_selection == 5:
-        timesteps_to_study =  [0.006, 0.008, 0.01, 0.014, 0.02, 0.024, 0.034, 0.04]
+        timesteps_to_study =  [0.01, 0.02, 0.05, 0.1]
         plotting_states_machine3 = [2, 3, 8, 9, 12, 13, 18, 19, 22, 23, 28, 29]
         np.random.seed(25)
         error_dist_per_timestep_pure = np.ones((len(timesteps_to_study), 2*len(plotting_states_machine3)))
@@ -373,8 +373,8 @@ if __name__ == "__main__":
         plt.tight_layout()
         import os
         os.makedirs('outputs', exist_ok=True)
-        plt.savefig('outputs/Figure_8.png', dpi=150)
-        print('图片已保存：outputs/Figure_8.png')
+        plt.savefig('outputs/Figure_9.png', dpi=150)
+        print('图片已保存：outputs/Figure_9.png')
         plt.close()
     
     elif args.study_selection == 6:
