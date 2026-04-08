@@ -309,7 +309,7 @@ if __name__ == "__main__":
         plt.close()
     
     elif args.study_selection == 5:
-        timesteps_to_study =  [0.01, 0.02, 0.05, 0.1]
+        timesteps_to_study = [0.004, 0.006, 0.008, 0.012, 0.018, 0.020, 0.022, 0.030, 0.032, 0.036, 0.040]
         plotting_states_machine3 = [2, 3, 8, 9, 12, 13, 18, 19, 22, 23, 28, 29]
         np.random.seed(25)
         error_dist_per_timestep_pure = np.ones((len(timesteps_to_study), 2*len(plotting_states_machine3)))
