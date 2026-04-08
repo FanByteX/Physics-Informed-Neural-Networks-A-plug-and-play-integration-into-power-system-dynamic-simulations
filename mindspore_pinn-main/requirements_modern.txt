@@ -1,0 +1,19 @@
+# Python dependencies for final_modern.py
+# Recommended Python version: 3.10 or 3.11
+# Installation: pip install -r requirements_modern.txt
+
+# Core deep learning framework
+# For CPU: pip install --index-url https://download.pytorch.org/whl/cpu torch torchvision torchaudio
+# For GPU (CUDA 12.1): pip install --index-url https://download.pytorch.org/whl/cu121 torch torchvision torchaudio
+torch>=2.8.0
+torchvision>=0.19.0
+torchaudio>=2.5.0
+# Scientific computing
+numpy>=2.1.0,<3
+scipy>=1.15.0
+# Visualization
+matplotlib>=3.10.0
+# Progress bar
+tqdm>=4.67.0
+# Physics-Informed Neural Networks framework
+deepxde>=1.8

@@ -5,6 +5,19 @@ import matplotlib.pyplot as plt
 import matplotlib.gridspec as gridspec
 import os
 
+# 全局字体与样式设置 (强制统一为 Times 风格)
+plt.rcParams.update({
+    "text.usetex": False,
+    "font.family": "serif",
+    "font.serif": ["DejaVu Serif", "Times New Roman"],  # DejaVu Serif 作为备选
+    "mathtext.fontset": "stix",
+    "axes.labelsize": 20,
+    "xtick.labelsize": 16,
+    "ytick.labelsize": 16,
+    "legend.fontsize": 18,
+    "axes.unicode_minus": False
+})
+
 class trajectories_overview:
     def __init__(self, sim_time, t_test_rk_pinn_boost, states_rk_pinn_boost, t_test_rk, states_pure_rk, t_test_assimulo, states_assimulo) -> None:
         assert sim_time > 0

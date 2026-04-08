@@ -242,7 +242,8 @@ if __name__ == "__main__":
         errors_pure_array = errors_analysis(t_test_pure_rk, states_evo, t_true, states_true, ratio_trapz_assimulo)
         errors_pinn_array = errors_analysis(t_evo_pinn, states_evo_pinn, t_true, states_true, ratio_trapz_assimulo)
         plotting = custom_overview1(args.sim_time, t_test_pure_rk, errors_pure_array, t_evo_pinn, errors_pinn_array)
-        plotting.trajectory_and_errors_plot(8, 10, t_true, states_true, states_evo, states_evo_pinn)
+        time_step_ms = 8 if args.sim_time == 10 else 40  # Figure_4显示8ms, Figure_5显示40ms
+        plotting.trajectory_and_errors_plot(8, 10, t_true, states_true, states_evo, states_evo_pinn, time_step_ms=time_step_ms)
         fig_name = 'Figure_4' if args.sim_time == 10 else 'Figure_5'
         plotting.show_results(filename=fig_name)
 
@@ -270,13 +271,25 @@ if __name__ == "__main__":
     elif args.study_selection == 4:
         import matplotlib.pyplot as plt
         import matplotlib.gridspec as gridspec
+        
+        # 全局字体与样式设置 (强制统一为 Times 风格)
+        plt.rcParams.update({
+            "text.usetex": False,
+            "font.family": "serif",
+            "font.serif": ["Times New Roman", "DejaVu Serif"],  # DejaVu Serif 作为备选
+            "mathtext.fontset": "stix",
+            "axes.labelsize": 20,
+            "xtick.labelsize": 16,
+            "ytick.labelsize": 16,
+            "legend.fontsize": 18,
+            "axes.unicode_minus": False
+        })
+        
         fig = plt.figure(figsize=(14, 10))
         gs = gridspec.GridSpec(1, 2)
         ax0 = plt.subplot(gs[0, 0])
-        ax0.set_title(r'$\delta_3 - \omega_3$')
         ax0.grid()
         ax1 = plt.subplot(gs[0, 1])
-        ax1.set_title(r'$V_{m,3}$')
         ax1.grid()
         t_true_complete, states_true_complete = return_true_solution_option4()
         time_step_assimulo = compute_time_step_assimulo(t_true_complete)
@@ -296,85 +309,289 @@ if __name__ == "__main__":
             zero_initial_errors = np.zeros((1, errors_pure_array.shape[1]))
             errors_simulator_p = np.vstack([zero_initial_errors, errors_pure_array])
             errors_simulator_h = np.vstack([zero_initial_errors, errors_pinn_array])
-            ax0.plot(t_test_pure_rk, errors_simulator_p[:, 8], color = 'orange', label='Pure solver')
-            ax0.plot(t_evo_pinn, errors_simulator_h[:, 8], color = 'blue', label='Hybrid solver')
-            ax1.plot(t_test_pure_rk, errors_simulator_p[:, 10], color = 'orange', label='Pure solver')
-            ax1.plot(t_evo_pinn, errors_simulator_h[:, 10], color = 'blue', label='Hybrid solver')
+            ax0.plot(t_test_pure_rk, errors_simulator_p[:, 8], color='b', linestyle='-', linewidth=3, alpha=0.9, label='Pure solver')
+            ax0.plot(t_evo_pinn, errors_simulator_h[:, 8], color='r', linestyle='--', linewidth=2.5, alpha=0.9, label='RIA-PINN hybrid solver')
+            ax1.plot(t_test_pure_rk, errors_simulator_p[:, 10], color='b', linestyle='-', linewidth=3, alpha=0.9, label='Pure solver')
+            ax1.plot(t_evo_pinn, errors_simulator_h[:, 10], color='r', linestyle='--', linewidth=2.5, alpha=0.9, label='RIA-PINN hybrid solver')
             print(ind+1, len(start_ini_cond))
+        # 设置y轴标签（加粗）
+        ax0.set_ylabel(r"$\boldsymbol{|\delta'_3 - \hat{\delta}'_3|} \ [\mathrm{rad}]$", fontsize=20)
+        ax0.set_xlabel(r'$\mathbf{Time\ [s]}$', fontsize=18)
+        ax0.tick_params(axis='both', which='major', labelsize=16)
+        ax1.set_ylabel(r"$\boldsymbol{|V_3 - \hat{V}_3|} \ [\mathrm{p.u.}]$", fontsize=20)
+        ax1.set_xlabel(r'$\mathbf{Time\ [s]}$', fontsize=18)
+        ax1.tick_params(axis='both', which='major', labelsize=16)
+        
+        # 添加统一的图例在顶部居中
+        from matplotlib.lines import Line2D
+        legend_elements = [
+            Line2D([0], [0], color='b', linestyle='-', linewidth=3, label='Pure solver'),
+            Line2D([0], [0], color='r', linestyle='--', linewidth=2.5, label='RIA-PINN hybrid solver')
+        ]
+        fig.legend(handles=legend_elements, loc='upper center', bbox_to_anchor=(0.5, 1.05), ncol=2, fontsize=18, frameon=True, edgecolor='black', fancybox=False)
+        
         plt.tight_layout()
         import os
         os.makedirs('outputs', exist_ok=True)
-        plt.savefig('outputs/Figure_7.png', dpi=150)
+        plt.savefig('outputs/Figure_7.png', dpi=150, bbox_inches='tight')
+        plt.savefig('outputs/Figure_7.pdf', format='pdf', bbox_inches='tight')
         print('图片已保存：outputs/Figure_7.png')
+        print('图片已保存：outputs/Figure_7.pdf')
         plt.close()
     
     elif args.study_selection == 5:
         timesteps_to_study = [0.004, 0.006, 0.008, 0.012, 0.018, 0.020, 0.022, 0.030, 0.032, 0.036, 0.040]
         plotting_states_machine3 = [2, 3, 8, 9, 12, 13, 18, 19, 22, 23, 28, 29]
         np.random.seed(25)
-        error_dist_per_timestep_pure = np.ones((len(timesteps_to_study), 2*len(plotting_states_machine3)))
-        error_dist_per_timestep_hybrid = np.ones((len(timesteps_to_study), 2*len(plotting_states_machine3)))
         t_true_complete, states_true_complete = return_true_solution_option4()
         time_step_assimulo = compute_time_step_assimulo(t_true_complete)
         nums_random_true_sim = np.random.randint(0, len(t_true_complete)-200, size=100).tolist()
-        for ind_timestep, current_timestep in enumerate(timesteps_to_study):
-            print(current_timestep, time_step_assimulo)
-            ratio_trapz_assimulo = compute_time_step_ratio(current_timestep, time_step_assimulo)
-            errors_dist_trapz  = np.ones((len(nums_random_true_sim), len(plotting_states_machine3)))
-            errors_dist_hybrid = np.ones((len(nums_random_true_sim), len(plotting_states_machine3)))
-            for ind_array, num_array_multi in enumerate(nums_random_true_sim):
-                ini_cond_sim = load_ini_conditions_true_option4(num_array_multi)
-                solver_pure_rk_method = TDS_simulation(dampings, freq, H, Xd_p, Yadmittance, pg_pf, ini_cond_sim, t_final=current_timestep, step_size=current_timestep)
-                t_test_pure_rk, states_evo = solver_pure_rk_method.simulation_main_loop(integration_scheme=args.rk_scheme)
-                solver_hybrid_pinn      = TDS_simulation(dampings, freq, H, Xd_p, Yadmittance, pg_pf, ini_cond_sim, t_final=current_timestep, step_size=current_timestep, 
-                                                    pinn_boost=args.machine, pinn_weights=simulation_pinn, pinn_limits=pinn_ops_limits)
-                t_evo_pinn, states_evo_pinn = solver_hybrid_pinn.simulation_main_loop(integration_scheme=args.rk_scheme)
-                t_true_sim, states_true_sim = return_true_solution_option4(num_array_multi, int(num_array_multi+ratio_trapz_assimulo+1))
-                t_true_sim += -t_true_complete[num_array_multi]
-                errors_pure_array = errors_analysis(t_test_pure_rk, states_evo, t_true_sim, states_true_sim, ratio_trapz_assimulo)
-                errors_pinn_array = errors_analysis(t_evo_pinn, states_evo_pinn, t_true_sim, states_true_sim, ratio_trapz_assimulo)
-                errors_dist_trapz[ind_array, :]  = errors_pure_array
-                errors_dist_hybrid[ind_array, :] = errors_pinn_array
-            medians_dist_trapz = np.median(errors_dist_trapz, axis=0)
-            q1_trapz = np.percentile(errors_dist_trapz, 25, axis=0)
-            q3_trapz = np.percentile(errors_dist_trapz, 75, axis=0)
-            iqr_trapz = q3_trapz - q1_trapz
-            upper_whisker_trapz = q3_trapz + 1.5 * iqr_trapz
-            boxplot_data_trapz = np.hstack([medians_dist_trapz, upper_whisker_trapz])
-            medians_dist_hybrid = np.median(errors_dist_hybrid, axis=0)
-            q1_hybrid = np.percentile(errors_dist_hybrid, 25, axis=0)
-            q3_hybrid = np.percentile(errors_dist_hybrid, 75, axis=0)
-            iqr_hybrid = q3_hybrid - q1_hybrid
-            upper_whisker_hybrid = q3_hybrid + 1.5 * iqr_hybrid
-            boxplot_data_hybrid = np.hstack([medians_dist_hybrid, upper_whisker_hybrid])
-            error_dist_per_timestep_pure[ind_timestep, :] = boxplot_data_trapz
-            error_dist_per_timestep_hybrid[ind_timestep, :] = boxplot_data_hybrid
-            print(ind_timestep+1, len(timesteps_to_study))
+        
+        # 数据文件路径
+        import os
+        os.makedirs('outputs', exist_ok=True)
+        data_file = 'outputs/Figure_9_data.npz'
+        
+        # 检查是否已有保存的数据
+        if os.path.exists(data_file):
+            print(f'加载数据文件: {data_file}')
+            data = np.load(data_file, allow_pickle=True)
+            errors_all_pure = data['errors_all_pure']  # shape: (n_timesteps, n_samples, n_states)
+            errors_all_hybrid = data['errors_all_hybrid']
+            print('数据加载完成!')
+        else:
+            print('开始收集误差数据...')
+            errors_all_pure = np.ones((len(timesteps_to_study), len(nums_random_true_sim), len(plotting_states_machine3)))
+            errors_all_hybrid = np.ones((len(timesteps_to_study), len(nums_random_true_sim), len(plotting_states_machine3)))
+            
+            for ind_timestep, current_timestep in enumerate(timesteps_to_study):
+                print(current_timestep, time_step_assimulo)
+                ratio_trapz_assimulo = compute_time_step_ratio(current_timestep, time_step_assimulo)
+                for ind_array, num_array_multi in enumerate(nums_random_true_sim):
+                    ini_cond_sim = load_ini_conditions_true_option4(num_array_multi)
+                    solver_pure_rk_method = TDS_simulation(dampings, freq, H, Xd_p, Yadmittance, pg_pf, ini_cond_sim, t_final=current_timestep, step_size=current_timestep)
+                    t_test_pure_rk, states_evo = solver_pure_rk_method.simulation_main_loop(integration_scheme=args.rk_scheme)
+                    solver_hybrid_pinn      = TDS_simulation(dampings, freq, H, Xd_p, Yadmittance, pg_pf, ini_cond_sim, t_final=current_timestep, step_size=current_timestep, 
+                                                        pinn_boost=args.machine, pinn_weights=simulation_pinn, pinn_limits=pinn_ops_limits)
+                    t_evo_pinn, states_evo_pinn = solver_hybrid_pinn.simulation_main_loop(integration_scheme=args.rk_scheme)
+                    t_true_sim, states_true_sim = return_true_solution_option4(num_array_multi, int(num_array_multi+ratio_trapz_assimulo+1))
+                    t_true_sim += -t_true_complete[num_array_multi]
+                    errors_pure_array = errors_analysis(t_test_pure_rk, states_evo, t_true_sim, states_true_sim, ratio_trapz_assimulo)
+                    errors_pinn_array = errors_analysis(t_evo_pinn, states_evo_pinn, t_true_sim, states_true_sim, ratio_trapz_assimulo)
+                    errors_all_pure[ind_timestep, ind_array, :] = errors_pure_array
+                    errors_all_hybrid[ind_timestep, ind_array, :] = errors_pinn_array
+                print(f'进度: {ind_timestep+1}/{len(timesteps_to_study)}')
+            
+            # 保存数据
+            np.savez(data_file, 
+                     errors_all_pure=errors_all_pure, 
+                     errors_all_hybrid=errors_all_hybrid,
+                     timesteps_to_study=timesteps_to_study,
+                     plotting_states_machine3=plotting_states_machine3)
+            print(f'数据已保存: {data_file}')
+        
+        # 计算统计量
+        medians_pure = np.median(errors_all_pure, axis=1)
+        q1_pure = np.percentile(errors_all_pure, 25, axis=1)
+        q3_pure = np.percentile(errors_all_pure, 75, axis=1)
+        iqr_pure = q3_pure - q1_pure
+        upper_whisker_pure = q3_pure + 1.5 * iqr_pure
+        
+        medians_hybrid = np.median(errors_all_hybrid, axis=1)
+        q1_hybrid = np.percentile(errors_all_hybrid, 25, axis=1)
+        q3_hybrid = np.percentile(errors_all_hybrid, 75, axis=1)
+        iqr_hybrid = q3_hybrid - q1_hybrid
+        upper_whisker_hybrid = q3_hybrid + 1.5 * iqr_hybrid
+        
+        # ============================================================
+        # 绘制折线图 (Figure 9)
+        # ============================================================
         import matplotlib
         matplotlib.use('Agg')
         import matplotlib.pyplot as plt
         import matplotlib.gridspec as gridspec
-        plotting_states_final = [8,10,4, 6] # [8,9,10,7]
-        fig = plt.figure(figsize=(14, 10))
-        gs = gridspec.GridSpec(1, 4)
-        for i, state_plot in enumerate(plotting_states_final):
+        from matplotlib.lines import Line2D
+        from matplotlib.ticker import LogLocator
+        
+        # 全局字体与样式设置 (强制统一为 Times 风格)
+        plt.rcParams.update({
+            "text.usetex": False,
+            "font.family": "serif",
+            "font.serif": ["Times New Roman", "DejaVu Serif"],  # DejaVu Serif 作为备选
+            "mathtext.fontset": "stix",
+            "axes.labelsize": 20,
+            "xtick.labelsize": 16,
+            "ytick.labelsize": 16,
+            "legend.fontsize": 18,
+            "axes.unicode_minus": False
+        })
+        
+        # 原始代码使用plotting_states_final = [8, 10, 4, 6]
+        # 这些索引直接对应plotting_states_machine3中的位置
+        plotting_states_final = [8, 10]  # 只绘制前两个状态（δ'_3和V_3）
+        fig = plt.figure(figsize=(14, 5))
+        gs = gridspec.GridSpec(1, 2)
+        axes_list = []
+        
+        for i, state_idx in enumerate(plotting_states_final):
             ax = plt.subplot(gs[0, i])
-            if i ==0:
-                ax.set_title(r'$\delta_3 - \omega_3$')
-            else:
-                ax.set_title(r'$V_{m,3}$')
-            ax.plot(timesteps_to_study, error_dist_per_timestep_pure[:,state_plot], color='r', linestyle = '-', label='trapz')
-            ax.plot(timesteps_to_study, error_dist_per_timestep_hybrid[:,state_plot],  color='g', linestyle= '-', label='PINN-trapz')
-            ax.plot(timesteps_to_study, error_dist_per_timestep_pure[:,state_plot+12], color='r', linestyle = '--')
-            ax.plot(timesteps_to_study, error_dist_per_timestep_hybrid[:,state_plot+12],  color='g', linestyle= '--')
+            axes_list.append(ax)
+            
+            # 美化网格线
+            ax.grid(True, which='major', linestyle='-', linewidth=0.8, alpha=0.3, color='gray')
+            ax.grid(True, which='minor', linestyle=':', linewidth=0.5, alpha=0.2, color='gray')
+            
+            # 绘制中位数线条，添加标记点
+            ax.plot(timesteps_to_study, medians_pure[:, state_idx], 
+                    color='b', linestyle='-', linewidth=2.5, alpha=0.9, 
+                    marker='o', markersize=7, markerfacecolor='white', markeredgewidth=2,
+                    label='Pure solver (median)')
+            ax.plot(timesteps_to_study, medians_hybrid[:, state_idx],  
+                    color='r', linestyle='-', linewidth=2.5, alpha=0.9,
+                    marker='s', markersize=6, markerfacecolor='white', markeredgewidth=2,
+                    label='Hybrid solver (median)')
+            
+            # 绘制上须（虚线），添加阴影区域
+            ax.fill_between(timesteps_to_study, 
+                            medians_pure[:, state_idx], 
+                            upper_whisker_pure[:, state_idx],
+                            color='b', alpha=0.15, label='_nolegend_')
+            ax.fill_between(timesteps_to_study, 
+                            medians_hybrid[:, state_idx], 
+                            upper_whisker_hybrid[:, state_idx],
+                            color='r', alpha=0.15, label='_nolegend_')
+            
             ax.set_xscale('log')
             ax.set_yscale('log')
-            ax.legend()
+            ax.set_xlabel(r'Time step $\Delta t$ [s]', fontsize=18)
+            ax.tick_params(axis='both', which='major', labelsize=16)
+            
+            # 设置x轴显示所有时间步长刻度
+            ax.set_xticks(timesteps_to_study)
+            ax.set_xticklabels([f'{dt:.3f}' for dt in timesteps_to_study], rotation=60, ha='right', fontsize=11)
+            
+            # 设置y轴显示更多刻度（对数尺度）
+            ax.yaxis.set_major_locator(LogLocator(numticks=15))
+            ax.minorticks_on()
+            
+            # 添加子图标签
+            ax.text(0.02, 0.98, f'({chr(97+i)})', transform=ax.transAxes, 
+                    fontsize=16, va='top')
+        
+        # 调整子图底部边距以容纳旋转的x轴标签
+        plt.subplots_adjust(bottom=0.2)
+        
+        # 设置y轴标签
+        axes_list[0].set_ylabel(r"$\boldsymbol{|\delta'_3 - \hat{\delta}'_3|} \ [\mathrm{rad}]$", fontsize=20)
+        axes_list[1].set_ylabel(r"$\boldsymbol{|V_3 - \hat{V}_3|} \ [\mathrm{p.u.}]$", fontsize=20)
+        
+        # 添加统一的图例在顶部居中
+        legend_elements = [
+            Line2D([0], [0], color='b', linestyle='-', linewidth=2.5, marker='o', 
+                   markersize=7, markerfacecolor='white', markeredgewidth=2, label='Pure solver'),
+            Line2D([0], [0], color='b', linestyle='-', alpha=0.2, linewidth=8, label='IQR range'),
+            Line2D([0], [0], color='r', linestyle='-', linewidth=2.5, marker='s', 
+                   markersize=6, markerfacecolor='white', markeredgewidth=2, label='RIA-PINN hybrid solver'),
+            Line2D([0], [0], color='r', linestyle='-', alpha=0.2, linewidth=8, label='IQR range')
+        ]
+        fig.legend(handles=legend_elements, loc='upper center', bbox_to_anchor=(0.5, 1.10), ncol=4, fontsize=18, frameon=True, edgecolor='black', fancybox=False)
+        
         plt.tight_layout()
-        import os
-        os.makedirs('outputs', exist_ok=True)
-        plt.savefig('outputs/Figure_9.png', dpi=150)
-        print('图片已保存：outputs/Figure_9.png')
+        plt.savefig('outputs/Figure_9.png', dpi=150, bbox_inches='tight')
+        plt.savefig('outputs/Figure_9.pdf', format='pdf', bbox_inches='tight')
+        print('折线图已保存：outputs/Figure_9.png')
+        plt.close()
+        
+        # ============================================================
+        # 绘制箱线图 (Figure 9 boxplot)
+        # ============================================================
+        print('正在生成箱线图...')
+        fig2 = plt.figure(figsize=(16, 6))
+        gs2 = gridspec.GridSpec(1, 2)
+        
+        for i, state_idx in enumerate(plotting_states_final):
+            ax = plt.subplot(gs2[0, i])
+            ax.grid(axis='y', alpha=0.3)
+            
+            if i == 0:
+                title = r"$\delta'_3$ Prediction Error"
+            else:
+                title = r"$V_3$ Prediction Error"
+            
+            # 准备箱线图数据 - 每个时间步有两个箱线（Pure和Hybrid并排）
+            positions = []
+            box_data = []
+            colors = []
+            
+            for j in range(len(timesteps_to_study)):
+                # Pure solver box
+                positions.append(j * 3)
+                box_data.append(errors_all_pure[j, :, state_idx])
+                colors.append('steelblue')
+                # Hybrid solver box
+                positions.append(j * 3 + 1)
+                box_data.append(errors_all_hybrid[j, :, state_idx])
+                colors.append('indianred')
+            
+            # 绘制箱线图
+            bp = ax.boxplot(box_data, positions=positions, widths=0.8, patch_artist=True,
+                            showfliers=False,
+                            medianprops=dict(color='black', linewidth=1.5),
+                            whiskerprops=dict(linewidth=1),
+                            capprops=dict(linewidth=1))
+            
+            # 设置箱体颜色
+            for patch, color in zip(bp['boxes'], colors):
+                patch.set_facecolor(color)
+                patch.set_alpha(0.7)
+            
+            ax.set_yscale('log')
+            ax.set_xlabel(r'$\mathbf{\Delta t\ [s]}$', fontsize=18)
+            ax.set_title(title, fontsize=16, fontweight='bold')
+            ax.tick_params(axis='both', which='major', labelsize=14)
+            
+            # 设置x轴刻度标签（显示在每对箱线图中间）
+            tick_positions = [j * 3 + 0.5 for j in range(len(timesteps_to_study))]
+            ax.set_xticks(tick_positions)
+            ax.set_xticklabels([f'{dt:.3f}' for dt in timesteps_to_study], rotation=60, ha='right', fontsize=10)
+            ax.set_xlim(-1, len(timesteps_to_study) * 3 - 0.5)
+        
+        # 设置y轴标签
+        axes_box = fig2.get_axes()
+        axes_box[0].set_ylabel(r"$\boldsymbol{|\delta'_3 - \hat{\delta}'_3|} \ [\mathrm{rad}]$", fontsize=18)
+        axes_box[1].set_ylabel(r"$\boldsymbol{|V_3 - \hat{V}_3|} \ [\mathrm{p.u.}]$", fontsize=18)
+        
+        # 添加图例
+        legend_elements_box = [
+            Line2D([0], [0], color='steelblue', linewidth=10, alpha=0.7, label='Pure solver'),
+            Line2D([0], [0], color='indianred', linewidth=10, alpha=0.7, label='Hybrid solver')
+        ]
+        fig2.legend(handles=legend_elements_box, loc='upper center', bbox_to_anchor=(0.5, 1.02), 
+                    ncol=2, fontsize=14, frameon=True, edgecolor='black', fancybox=False)
+        
+        plt.tight_layout()
+        plt.subplots_adjust(bottom=0.2, top=0.88)
+        plt.savefig('outputs/Figure_9_boxplot.png', dpi=150, bbox_inches='tight')
+        plt.savefig('outputs/Figure_9_boxplot.pdf', format='pdf', bbox_inches='tight')
+        print('箱线图已保存：outputs/Figure_9_boxplot.png')
+        plt.close()
+    
+    elif args.study_selection == 6:
+        
+        # 添加图例
+        legend_elements_box = [
+            Line2D([0], [0], color='steelblue', linewidth=10, alpha=0.7, label='Pure solver'),
+            Line2D([0], [0], color='indianred', linewidth=10, alpha=0.7, label='Hybrid solver')
+        ]
+        fig2.legend(handles=legend_elements_box, loc='upper center', bbox_to_anchor=(0.5, 1.02), 
+                    ncol=2, fontsize=14, frameon=True, edgecolor='black', fancybox=False)
+        
+        plt.tight_layout()
+        plt.subplots_adjust(bottom=0.2, top=0.88)
+        plt.savefig('outputs/Figure_9_boxplot.png', dpi=150, bbox_inches='tight')
+        plt.savefig('outputs/Figure_9_boxplot.pdf', format='pdf', bbox_inches='tight')
+        print('箱线图已保存：outputs/Figure_9_boxplot.png')
+        print('箱线图已保存：outputs/Figure_9_boxplot.pdf')
         plt.close()
     
     elif args.study_selection == 6:
