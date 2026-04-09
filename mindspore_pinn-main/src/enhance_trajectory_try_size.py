@@ -5,7 +5,22 @@
 用于美化Res-PINN的轨迹预测图    生成trajectories_enhanced.pdf的脚本文件
 """
 import numpy as np
+import matplotlib
+matplotlib.use('Agg')
 import matplotlib.pyplot as plt
+
+# 设置统一字体风格 (Times New Roman + STIX)
+plt.rcParams.update({
+    "text.usetex": False,
+    "font.family": "serif",
+    "font.serif": ["Times New Roman", "DejaVu Serif"],  # DejaVu Serif 作为备选
+    "mathtext.fontset": "stix",
+    "axes.labelsize": 20,
+    "xtick.labelsize": 16,
+    "ytick.labelsize": 16,
+    "legend.fontsize": 18,
+    "axes.unicode_minus": False
+})
 from matplotlib.patches import Rectangle
 from mpl_toolkits.axes_grid1.inset_locator import inset_axes, mark_inset
 import os
@@ -32,10 +47,9 @@ def enhance_trajectory_plot(log_dir):
     # 5个变量的标签（LaTeX格式）
     #var_names = [r'$\omega_1(t)$', r'$\omega_2(t)$', r'$\delta_2(t)$', r'$\delta_3(t)$', r'$V_3(t)$']
     # 5个变量的标签（LaTeX格式）- 使用boldsymbol让数学符号加粗
-    # var_names = [r'$\boldsymbol{\omega_1(t)}$', r'$\boldsymbol{\omega_2(t)}$', 
-    #              r'$\boldsymbol{\delta_2(t)}$', r'$\boldsymbol{\delta_3(t)}$', 
-    #              r'$\boldsymbol{V_3(t)}$']
-    var_names = ['ω₁(t)', 'ω₂(t)', 'δ₂(t)', 'δ₃(t)', 'V₃(t)']
+    var_names = [r'$\boldsymbol{\omega_1(t)}$', r'$\boldsymbol{\omega_2(t)}$', 
+                 r'$\boldsymbol{\delta_2(t)}$', r'$\boldsymbol{\delta_3(t)}$', 
+                 r'$\boldsymbol{V_3(t)}$']
 
 
     # 创建图形 - 增加高度
@@ -60,7 +74,7 @@ def enhance_trajectory_plot(log_dir):
         ax.plot(time, y_exact[:, i], 'b-', linewidth=3, 
                 label='Exact', alpha=0.9)
         ax.plot(time, y_pred_smooth, 'r--', linewidth=2.5, 
-                label='Predicted', alpha=0.9)
+                label='RIA-PINN', alpha=0.9)
         
         # 设置标签和网格 - 只给Y轴标签加粗
         ax.set_ylabel(var_names[i], fontsize=20, fontweight='bold')  # 添加fontweight='bold'
@@ -72,7 +86,7 @@ def enhance_trajectory_plot(log_dir):
         
         # 只在最后一个子图显示x轴标签
         if i == 4:
-            ax.set_xlabel('Time (s)', fontsize=20, fontweight='bold')
+            ax.set_xlabel('Time (s)', fontsize=20)
         
         # ===== 添加局部放大图 =====
         # 创建内嵌子图（位置根据各变量特点调整）

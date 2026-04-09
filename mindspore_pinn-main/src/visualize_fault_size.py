@@ -25,9 +25,18 @@ from data.DAE import dae_data
 from supervisor import supervisor
 from metrics import l2_relative_error
 
-# 设置中文字体
-plt.rcParams['font.sans-serif'] = ['WenQuanYi Micro Hei', 'SimHei', 'DejaVu Sans']
-plt.rcParams['axes.unicode_minus'] = False
+# 设置统一字体风格 (Times New Roman + STIX)
+plt.rcParams.update({
+    "text.usetex": False,
+    "font.family": "serif",
+    "font.serif": ["Times New Roman", "DejaVu Serif"],  # DejaVu Serif 作为备选
+    "mathtext.fontset": "stix",
+    "axes.labelsize": 20,
+    "xtick.labelsize": 16,
+    "ytick.labelsize": 16,
+    "legend.fontsize": 18,
+    "axes.unicode_minus": False
+})
 
 # 运行前清理函数（仅清理与本脚本相关的图像与缓存，不删除npz/pth）
 def clean_previous_logs(logs_dir="./logs"):
@@ -167,7 +176,9 @@ def plot_hybrid_trajectories(t_normal, y_normal_exact, y_normal_pred,
     
     ylims = [None, None, None, None, (0.2, 1.2)]
     xlabel = [None, None, None, None, 'Time (s)']
-    ylabel = [r'$\omega_1(t)$', r'$\omega_2(t)$', r'$\delta_2(t)$', r'$\delta_3(t)$', r'$V_3(t)$']
+    ylabel = [r'$\boldsymbol{\omega_1(t)}$', r'$\boldsymbol{\omega_2(t)}$', 
+              r'$\boldsymbol{\delta_2(t)}$', r'$\boldsymbol{\delta_3(t)}$', 
+              r'$\boldsymbol{V_3(t)}$']
     fig, ax = plt.subplots(nrows=5, ncols=1, figsize=(12, 22.25))    
     for i in range(5):
         # 蓝色实线 - Exact
@@ -180,11 +191,11 @@ def plot_hybrid_trajectories(t_normal, y_normal_exact, y_normal_pred,
             indices = np.arange(0, len(t_flat), 8)
             ax[i].plot(t_flat[indices], y_pred_all[i, indices], 
                        color='r', linewidth=2.5, linestyle='--',
-                       label='Predicted (Res-PINN)', zorder=3)
+                       label='RIA-PINN', zorder=3)
         else:
             ax[i].plot(t_flat, y_pred_all[i, :].reshape(-1,), 
                        color='r', linewidth=2.5, linestyle='--',
-                       label='Predicted (Res-PINN)', zorder=3)
+                       label='RIA-PINN', zorder=3)
         
         # 故障时刻标注线
         ax[i].axvline(x=fault_time, color='blue', linestyle=':', 
@@ -198,7 +209,7 @@ def plot_hybrid_trajectories(t_normal, y_normal_exact, y_normal_pred,
         if ylims[i] is not None:
             ax[i].set_ylim(ylims[i])
         if xlabel[i] is not None:
-            ax[i].set_xlabel(xlabel[i], fontsize=22, fontweight='bold')  # 20→22
+            ax[i].set_xlabel(xlabel[i], fontsize=22)  # 20→22
         ax[i].set_ylabel(ylabel[i], fontsize=22, fontweight='bold')  # 20→22
         
         # 设置主图X、Y轴刻度字号 - 字号扩大2号：16→18

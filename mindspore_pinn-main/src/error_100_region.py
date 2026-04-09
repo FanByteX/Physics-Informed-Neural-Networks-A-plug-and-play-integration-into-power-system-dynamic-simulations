@@ -30,9 +30,18 @@ LW_PRED = 2.5     # 基准 Pred: 2.5
 INSET_TITLE_FONTSIZE = 9
 INSET_TICK_FONTSIZE = 8
 
-# 字体设置（确保英文正常显示，无乱码）
-plt.rcParams["font.family"] = ["Arial", "Helvetica", "DejaVu Sans"]
-plt.rcParams['axes.unicode_minus'] = False  # 正确显示负号
+# 设置统一字体风格 (Times New Roman + STIX)
+plt.rcParams.update({
+    "text.usetex": False,
+    "font.family": "serif",
+    "font.serif": ["Times New Roman", "DejaVu Serif"],
+    "mathtext.fontset": "stix",
+    "axes.labelsize": 20,
+    "xtick.labelsize": 16,
+    "ytick.labelsize": 16,
+    "legend.fontsize": 18,
+    "axes.unicode_minus": False
+})
 
 
 def init_target_plot_dir(plot_dir="logs/fault_error_plots"):
@@ -74,7 +83,7 @@ def calculate_errors_after_fault(npz_path, fault_strat=4.0, h=0.1, N_fault=100):
     time_arr = data['time'].reshape(-1,)  # 关键：展平时间数组
     y_pred = data['y_pred'][:5, :]
     y_exact = data['y_eval'][:5, :]
-    var_names = [r'$\omega_1$', r'$\omega_2$', r'$\delta_2$', r'$\delta_3$', r'$V_3$']
+    var_names = [r'$\boldsymbol{\omega_1}$', r'$\boldsymbol{\omega_2}$', r'$\boldsymbol{\delta_2}$', r'$\boldsymbol{\delta_3}$', r'$\boldsymbol{V_3}$']
     err_type = ['Absolute Error', 'Absolute Error', 'Relative Error (%)', 'Relative Error (%)', 'Relative Error (%)']
 
     # -------------------- 核心筛选：严格0.1s步长点（排除近似值） --------------------
@@ -164,8 +173,7 @@ def plot_error_statistics(error_data, save_dir):
     生成完整误差图表（适配4.0s~20.0s范围，100个唯一数据点，颜色加深）
     包含3个子图：w1/w2绝对误差折线图、delta2/delta3/V3相对误差折线图、最大误差对比柱状图
     """
-    timestamp = time.strftime("%Y%m%d_%H%M%S", time.localtime())
-    plot_filename = f"{timestamp}_fault_error_4.0-20.0s.png"
+    plot_filename = "fault_injection_100_v2.png"
     save_path = os.path.join(save_dir, plot_filename)
 
     time_arr = error_data['time']
@@ -241,9 +249,9 @@ def plot_error_statistics(error_data, save_dir):
     ax1.axvline(x=fault_strat, color='gray', linestyle='--', linewidth=2)
     
 
-    ax1.set_xlabel('Time (s)', fontsize=LABEL_FONTSIZE, fontweight='bold')
-    ax1.set_ylabel('Absolute Error', fontsize=LABEL_FONTSIZE, fontweight='bold')
-    ax1.tick_params(axis='both', which='major', labelsize=20)
+    ax1.set_xlabel('Time (s)', fontsize=LABEL_FONTSIZE, fontweight='normal')
+    ax1.set_ylabel('Absolute Error', fontsize=LABEL_FONTSIZE, fontweight='normal')
+    ax1.tick_params(axis='both', which='major', labelsize=16)
     add_axes_background(ax1)
 
     fault_patch = Patch(facecolor='#FE9B1C', alpha=0.3, edgecolor='black', label=f'Fault Injection ({fault_strat}s)')
@@ -319,9 +327,9 @@ def plot_error_statistics(error_data, save_dir):
 
     ax2.axvline(x=fault_strat, color='gray', linestyle='--', linewidth=2)
 
-    ax2.set_xlabel('Time (s)', fontsize=LABEL_FONTSIZE, fontweight='bold')
-    ax2.set_ylabel('Relative Error (%)', fontsize=LABEL_FONTSIZE, fontweight='bold')
-    ax2.tick_params(axis='both', which='major', labelsize=20)
+    ax2.set_xlabel('Time (s)', fontsize=LABEL_FONTSIZE, fontweight='normal')
+    ax2.set_ylabel('Relative Error (%)', fontsize=LABEL_FONTSIZE, fontweight='normal')
+    ax2.tick_params(axis='both', which='major', labelsize=16)
     add_axes_background(ax2)
 
     fault_patch = Patch(facecolor='#FE9B1C', alpha=0.3, edgecolor='black', label=f'Fault Injection ({fault_strat}s)')
@@ -382,9 +390,9 @@ def plot_error_statistics(error_data, save_dir):
         )
 
     # ⚠️ 这里按你的原逻辑，只是保持你已经改过的字号写法，不再动语义
-    ax3.set_xlabel('Time (s)', fontsize=LABEL_FONTSIZE, fontweight='bold')
-    ax3.set_ylabel('Maximum Error', fontsize=LABEL_FONTSIZE, fontweight='bold')
-    ax3.tick_params(axis='both', which='major', labelsize=20)
+    ax3.set_xlabel('Time (s)', fontsize=LABEL_FONTSIZE, fontweight='normal')
+    ax3.set_ylabel('Maximum Error', fontsize=LABEL_FONTSIZE, fontweight='normal')
+    ax3.tick_params(axis='both', which='major', labelsize=16)
 
     ax3.set_xticks(x_pos)
     ax3.set_xticklabels(
@@ -467,7 +475,7 @@ def main():
     print("="*80)
 
     target_save_dir = init_target_plot_dir("logs/fault_error_plots")
-    npz_data_path = os.path.abspath("./logs/fault-b5-finetune-step2/prediction-data.npz")
+    npz_data_path = os.path.abspath("./src/logs/fault-b5-finetune-step2/prediction-data.npz")
     print(f"npz file path: {npz_data_path}")
 
     error_data = calculate_errors_after_fault(
