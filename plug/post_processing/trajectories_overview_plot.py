@@ -55,7 +55,7 @@ class trajectories_overview:
         return res_trajectory
 
     def compute_results(self, pure_rk_scheme=False, assimulo_states=False):
-        fig = plt.figure(figsize=(14, 10))
+        fig = plt.figure(figsize=(20, 7))  # 与 Figure_4/5 统一尺寸
         gs = gridspec.GridSpec(3, 2)
 
         ax0 = plt.subplot(gs[0, 0])

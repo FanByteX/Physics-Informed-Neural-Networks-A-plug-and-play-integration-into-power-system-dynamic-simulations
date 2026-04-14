@@ -190,7 +190,7 @@ def plot_error_statistics(error_data, save_dir):
 
     fig, (ax1, ax2, ax3) = plt.subplots(
         3, 1,
-        figsize=(14, 18),
+        figsize=(20, 22.27),
         dpi=300,
         tight_layout=True
     )

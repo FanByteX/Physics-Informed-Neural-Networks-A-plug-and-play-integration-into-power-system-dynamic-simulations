@@ -429,7 +429,7 @@ if __name__ == "__main__":
         # 原始代码使用plotting_states_final = [8, 10, 4, 6]
         # 这些索引直接对应plotting_states_machine3中的位置
         plotting_states_final = [8, 10]  # 只绘制前两个状态（δ'_3和V_3）
-        fig = plt.figure(figsize=(14, 5))
+        fig = plt.figure(figsize=(20, 7))  # 与 Figure_4/5 统一尺寸
         gs = gridspec.GridSpec(1, 2)
         axes_list = []
         

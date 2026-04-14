@@ -38,7 +38,7 @@ class custom_overview1:
 
     def trajectory_and_errors_plot(self, state_1, state_2, time_array_true, states_array_true, states_array_pure, states_array_hybrid, time_step_ms=40):
         assert self.errors_solver1.shape[1] == self.errors_solver2.shape[1]
-        fig = plt.figure(figsize=(14, 10))
+        fig = plt.figure(figsize=(20, 7))  # 放大尺寸以适合期刊模板
         gs = gridspec.GridSpec(1, 2)
         ax0 = plt.subplot(gs[0, 0])
         #ax0.set_title(r'$\delta - \theta$ Gen. 3', fontsize=20, fontweight='bold')
@@ -47,17 +47,19 @@ class custom_overview1:
         #ax1.set_title(r'$V_m$ Gen. 3', fontsize=20, fontweight='bold')
         ax1.grid()
 
-        ax0.plot(time_array_true, states_array_true[:, 22]-states_array_true[:, 29], color='k', linestyle='--', label='Ground truth')
-        ax0.plot(self.t_test_solver1, states_array_pure[:, 22]- states_array_pure[:, 29], color='b', linestyle='-', linewidth=3, alpha=0.9, label='Pure solver') # Pure solver: 蓝色实线(真实值样式)
-        ax0.plot(self.t_test_solver2, states_array_hybrid[:, 22]- states_array_hybrid[:, 29], color='r', linestyle='--', linewidth=2.5, alpha=0.9, label='RIA-PINN hybrid solver') # PINN hybrid: 红色虚线(预测值样式)
+        # 先画 Pure solver 和 PINN hybrid，再画 Ground truth 在最上层
+        ax0.plot(self.t_test_solver1, states_array_pure[:, 22]- states_array_pure[:, 29], color='b', linestyle='-', linewidth=3, alpha=0.9, label='Pure solver') # Pure solver: 蓝色实线
+        ax0.plot(self.t_test_solver2, states_array_hybrid[:, 22]- states_array_hybrid[:, 29], color='r', linestyle='--', linewidth=2.5, alpha=0.9, label='RIA-PINN hybrid solver') # PINN hybrid: 红色虚线
+        ax0.plot(time_array_true, states_array_true[:, 22]-states_array_true[:, 29], color='k', linestyle='--', label='Ground truth') # Ground truth: 黑色虚线在最上层
         #ax0.set_ylabel(r"$\delta'_3 = \delta_3 - \theta_3 \ [\mathrm{rad}]$", fontsize=20)  #不加粗
         ax0.set_ylabel(r"$\boldsymbol{\delta'_3 = \delta_3 - \theta_3} \ [\mathrm{rad}]$", fontsize=20)  #加粗变量
         ax0.set_xlabel(r'$\mathbf{Time\ [s]}$', fontsize=18)
         ax0.tick_params(axis='both', which='major', labelsize=16)
 
-        ax1.plot(time_array_true, states_array_true[:, 28], color='k', linestyle='--')
+        # 先画 Pure solver 和 PINN hybrid，再画 Ground truth 在最上层
         ax1.plot(self.t_test_solver1, states_array_pure[:, 28], color='b', linestyle='-', linewidth=3, alpha=0.9)
         ax1.plot(self.t_test_solver2, states_array_hybrid[:, 28], color='r', linestyle='--', linewidth=2.5, alpha=0.9)
+        ax1.plot(time_array_true, states_array_true[:, 28], color='k', linestyle='--')  # Ground truth: 黑色虚线在最上层
         ax1.set_ylabel(r"$V_3 \ [\mathrm{p.u.}]$", fontsize=20)
         ax1.set_xlabel(r'$\mathbf{Time\ [s]}$', fontsize=18)
         ax1.tick_params(axis='both', which='major', labelsize=16)
@@ -104,7 +106,7 @@ class custom_overview1:
             Line2D([0], [0], color='b', linestyle='-', linewidth=3, label='Pure solver'),
             Line2D([0], [0], color='r', linestyle='--', linewidth=2.5, label='RIA-PINN hybrid solver')
         ]
-        fig.legend(handles=legend_elements, loc='upper center', bbox_to_anchor=(0.5, 1.05), ncol=3, fontsize=18, frameon=True, edgecolor='black', fancybox=False)
+        fig.legend(handles=legend_elements, loc='upper center', bbox_to_anchor=(0.5, 1.08), ncol=3, fontsize=18, frameon=True, edgecolor='black', fancybox=False)
 
     def add_zeros_initial_value(self, errors_simulator):
         zero_initial_errors = np.zeros((1, errors_simulator.shape[1]))
